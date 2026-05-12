@@ -66,6 +66,20 @@ impl SupabaseClient {
         })
     }
 
+    /// Constructeur pour les tests — pointe vers un serveur HTTP local (wiremock, sans https_only).
+    #[allow(dead_code)]
+    pub fn new_for_test(base_url: &str, service_key: &str) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .expect("reqwest client");
+        Self {
+            client,
+            base_url: base_url.trim_end_matches('/').to_string(),
+            service_key: service_key.to_string(),
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Push des entrées fiscales
     // -----------------------------------------------------------------------
@@ -268,5 +282,88 @@ impl SupabaseClient {
             Ok(r) => r.status() != StatusCode::SERVICE_UNAVAILABLE,
             Err(_) => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::matchers::{method, path};
+    use crate::serializer::SessionPayload;
+
+    fn make_session_payload(id: &str, session_ref: &str) -> SessionPayload {
+        SessionPayload {
+            id:             id.to_string(),
+            site_id:        "SITE-001".to_string(),
+            session_ref:    session_ref.to_string(),
+            opened_at:      "2024-01-01T10:00:00Z".to_string(),
+            closed_at:      None,
+            operator_id:    None,
+            opening_amount: 0,
+            status:         "open".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn push_sessions_all_duplicates_returns_ok_zero() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/v1/sessions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&server)
+            .await;
+
+        let client = SupabaseClient::new_for_test(&server.uri(), "test-key");
+        let payloads = vec![
+            make_session_payload("uuid-1", "S0001"),
+            make_session_payload("uuid-2", "S0002"),
+        ];
+        let result = client.push_sessions(&payloads).await;
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn push_sessions_one_inserted_returns_ok_one() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/v1/sessions"))
+            .respond_with(
+                ResponseTemplate::new(201)
+                    .set_body_json(serde_json::json!([{"id": "uuid-1"}])),
+            )
+            .mount(&server)
+            .await;
+
+        let client = SupabaseClient::new_for_test(&server.uri(), "test-key");
+        let payloads = vec![make_session_payload("uuid-1", "S0001")];
+        let result = client.push_sessions(&payloads).await;
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn push_sessions_empty_batch_skips_http() {
+        let server = MockServer::start().await;
+        let client = SupabaseClient::new_for_test(&server.uri(), "test-key");
+        let result = client.push_sessions(&[]).await;
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn push_sessions_http_error_returns_err() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/v1/sessions"))
+            .respond_with(
+                ResponseTemplate::new(409)
+                    .set_body_string(r#"{"code":"23505","message":"duplicate key"}"#),
+            )
+            .mount(&server)
+            .await;
+
+        let client = SupabaseClient::new_for_test(&server.uri(), "test-key");
+        let payloads = vec![make_session_payload("uuid-1", "S0001")];
+        let result = client.push_sessions(&payloads).await;
+        assert!(matches!(result, Err(SyncError::HttpError { status: 409, .. })));
     }
 }
