@@ -1,7 +1,7 @@
 use std::env;
 use sqlx::sqlite::SqlitePoolOptions;
 use tempfile::NamedTempFile;
-use sync_client::{client::SupabaseClient, config::SyncConfig, sync_loop::run_sync_cycle};
+use sync_client::{client::SupabaseClient, config::SyncConfig, serializer::SessionPayload, sync_loop::run_sync_cycle};
 use fiscal_engine::{
     journal::store::JournalStore,
     types::{operation::OperationType, session::Session, tva::TvaRate},
@@ -166,4 +166,67 @@ async fn test_e2e_sync_sqlite_to_supabase() {
     cleanup_supabase(&config, &suuid).await;
 
     println!("\n=== TEST E2E REUSSI ===\n");
+}
+
+/// Simule un crash entre push_sessions réussi et mark_sessions_synced.
+/// La session est déjà dans Supabase mais encore synced=0 localement.
+/// Le cycle suivant doit réussir : ignore-duplicates retourne [], la session
+/// est marquée synced et les entrées sont poussées sans erreur FK.
+#[tokio::test]
+#[ignore = "Necessite SUPABASE_SERVICE_KEY et reseau actif"]
+async fn test_e2e_idempotence_crash_recovery() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter("sync_client=debug,fiscal_engine=info")
+        .try_init();
+
+    println!("\n=== TEST E2E IDEMPOTENCE CRASH-RECOVERY ===\n");
+
+    let db_file = NamedTempFile::new().expect("NamedTempFile echoue");
+    let db_path = db_file.path().to_str().unwrap().to_string();
+    let config = make_config(&db_path);
+    let store = setup_db(&db_path).await;
+    let client = SupabaseClient::new(&config).expect("SupabaseClient::new echoue");
+
+    assert!(client.is_reachable().await, "Supabase inaccessible");
+
+    let (session_uuid, _entry_uuids) = seed_local_db(&store).await;
+    let suuid = session_uuid.to_string();
+    println!("[seed] Session : {}", suuid);
+
+    // Étape 1 : pousser la session vers Supabase sans appeler mark_sessions_synced
+    // (simule un crash entre les deux opérations)
+    let sessions = store.load_unsynced_sessions().await.unwrap();
+    let payloads: Vec<SessionPayload> = sessions.iter()
+        .map(|s| SessionPayload::from_session(s, &config.site_id))
+        .collect();
+    let inserted = client.push_sessions(&payloads).await.expect("1er push_sessions echoue");
+    assert_eq!(inserted, 1, "1 session inseree au 1er push");
+    println!("[crash-sim] Session poussee dans Supabase, mark_sessions_synced NON appele");
+
+    // La session est encore synced=0 localement
+    assert_eq!(store.load_unsynced_sessions().await.unwrap().len(), 1, "session encore non-sync");
+    assert!(verify_session_in_supabase(&config, &suuid).await, "Session absente de Supabase apres 1er push");
+    println!("[crash-sim] synced=0 local + presente dans Supabase : crash bien simule");
+
+    // Étape 2 : run_sync_cycle — la session est un doublon, ignore-duplicates retourne []
+    // Le cycle doit marquer la session synced ET pousser les entrées
+    println!("[recovery] run_sync_cycle...");
+    let m = run_sync_cycle(&store, &client, &config).await.expect("run_sync_cycle echoue");
+    println!("[recovery] {}ms | sessions={} entrees={} echecs={}", m.duration_ms, m.sessions_pushed, m.entries_pushed, m.batches_failed);
+
+    assert_eq!(m.batches_failed,  0, "aucun batch echoue");
+    assert_eq!(m.sessions_pushed, 1, "session marquee synced localement");
+    assert_eq!(m.entries_pushed,  3, "3 entrees poussees");
+
+    assert_eq!(store.load_unsynced_sessions().await.unwrap().len(), 0, "session synced=1 apres recovery");
+    assert_eq!(store.load_unsynced_entries(100).await.unwrap().len(), 0, "entrees synced=1 apres recovery");
+
+    let count = count_entries_in_supabase(&config, &suuid).await;
+    assert_eq!(count, 3, "3 entrees dans Supabase");
+    println!("[verify] 3 entrees dans Supabase OK");
+
+    println!("[cleanup] Suppression donnees de test...");
+    cleanup_supabase(&config, &suuid).await;
+
+    println!("\n=== TEST E2E IDEMPOTENCE CRASH-RECOVERY REUSSI ===\n");
 }
