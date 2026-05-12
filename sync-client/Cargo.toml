@@ -1,0 +1,36 @@
+[package]
+name = "sync-client"
+version = "0.1.0"
+edition = "2021"
+description = "Agent de synchronisation edge → cloud (Supabase) avec mode offline-first"
+license = "UNLICENSED"
+
+[lib]
+name = "sync_client"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sync-client"
+path = "src/main.rs"
+
+[dependencies]
+fiscal-engine = { path = "../fiscal-engine" }
+common         = { path = "../common" }
+serde          = { workspace = true }
+serde_json     = { workspace = true }
+thiserror      = { workspace = true }
+anyhow         = { workspace = true }
+tokio          = { workspace = true }
+tracing        = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest        = { workspace = true }
+sqlx           = { workspace = true }
+uuid           = { workspace = true }
+time           = { workspace = true }
+
+[dev-dependencies]
+tempfile       = "3.10"
+tokio          = { workspace = true }
+reqwest        = { workspace = true }
+serde_json     = { workspace = true }
+tracing-subscriber = { workspace = true }

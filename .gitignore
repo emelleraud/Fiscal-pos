@@ -1,0 +1,35 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Secrets
+.env
+.env.*
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SQLite (bases de développement local)
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+
+# Node (pos-app, étapes ultérieures)
+node_modules/
+dist/
+.next/
+out/
+
+# Electron
+release/

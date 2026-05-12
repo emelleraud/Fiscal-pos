@@ -1,0 +1,28 @@
+[package]
+name = "edge-api"
+version = "0.1.0"
+edition = "2021"
+description = "Serveur HTTP Axum — API locale du restaurant (LAN only)"
+license = "UNLICENSED"
+
+[[bin]]
+name = "edge-api"
+path = "src/main.rs"
+
+[dependencies]
+fiscal-engine = { path = "../fiscal-engine" }
+common = { path = "../common" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }

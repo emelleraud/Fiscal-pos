@@ -1,0 +1,23 @@
+[package]
+name = "fiscal-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Moteur fiscal certifiable NF525 — journal immuable, hash chaîné, rapports Z"
+license = "UNLICENSED"
+
+[dependencies]
+common = { path = "../common" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+time = { workspace = true }
+uuid = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

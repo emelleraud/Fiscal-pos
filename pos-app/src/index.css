@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Variables CSS globales — thème sombre QSR
+   Conçu pour des environnements à forte luminosité ambiante
+   (cuisines, comptoirs en plein jour) : contraste élevé.
+   ============================================================ */
+
+:root {
+  --color-bg-primary:   #111827; /* gray-900 */
+  --color-bg-secondary: #1f2937; /* gray-800 */
+  --color-bg-tertiary:  #374151; /* gray-700 */
+  --color-border:       #374151; /* gray-700 */
+  --color-text-primary: #f9fafb; /* gray-50  */
+  --color-text-muted:   #9ca3af; /* gray-400 */
+  --color-accent:       #3b82f6; /* blue-500 */
+  --color-success:      #22c55e; /* green-500 */
+  --color-danger:       #ef4444; /* red-500  */
+  --color-warning:      #f59e0b; /* amber-500 */
+}
+
+/* ============================================================
+   Base : reset et police
+   ============================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Pas de scroll global — chaque écran gère son propre scroll */
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  /* Anti-aliasing optimal pour les écrans tactiles */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Désactiver la sélection de texte (mode kiosk) */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ============================================================
+   Zones tactiles — minimum 44x44px (WCAG 2.1 niveau AA)
+   Critique pour les terminaux tactile QSR
+   ============================================================ */
+
+button, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation; /* Évite le délai de 300ms sur mobile/tactile */
+}
+
+/* ============================================================
+   Scrollbar personnalisée — thème sombre
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-tertiary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563; /* gray-600 */
+}
+
+/* ============================================================
+   Impression — rapport Z et tickets
+   ============================================================ */
+
+@media print {
+  body {
+    background: white;
+    color: black;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* ============================================================
+   Utilitaires Tailwind custom
+   ============================================================ */
+
+@layer utilities {
+  /* Couleur bg intermédiaire non disponible dans Tailwind de base */
+  .bg-gray-750 {
+    background-color: #2d3748;
+  }
+
+  /* Focus visible pour l'accessibilité sur écrans tactiles */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900;
+  }
+}
