@@ -554,6 +554,10 @@ mod tests {
             .execute(&pool).await.expect("Migration 0001");
         sqlx::query(include_str!("../../migrations/0002_z_reports_archives.sql"))
             .execute(&pool).await.expect("Migration 0002");
+        sqlx::query(include_str!("../../migrations/0003_sessions_sync.sql"))
+            .execute(&pool).await.expect("Migration 0003");
+        sqlx::query(include_str!("../../migrations/0004_z_reports_sync.sql"))
+            .execute(&pool).await.expect("Migration 0004");
 
         pool
     }

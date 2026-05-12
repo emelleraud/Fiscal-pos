@@ -30,6 +30,7 @@ use crate::{
         operation::OperationType,
         session::{Session, SessionStatus},
         tva::{TvaBreakdown, TvaRate},
+        z_report::ZReport,
     },
 };
 use common::{Cents, FiscalEntryId, SessionId};
@@ -74,17 +75,72 @@ impl JournalStore {
 
     /// Exécute les migrations SQLite depuis le répertoire `migrations/`.
     ///
-    /// Idempotent : les migrations déjà appliquées sont ignorées.
+    /// Idempotent : les migrations déjà appliquées sont ignorées grâce à
+    /// la table `_applied_migrations` qui trace chaque version appliquée.
     ///
     /// # Errors
     /// Retourne `FiscalError::Database` si une migration échoue.
     pub async fn run_migrations(&self) -> Result<(), FiscalError> {
-        sqlx::query(include_str!("../../migrations/0001_initial_schema.sql"))
-            .execute(&self.pool).await?;
-        sqlx::query(include_str!("../../migrations/0002_z_reports_archives.sql"))
-            .execute(&self.pool).await?;
-        sqlx::query(include_str!("../../migrations/0003_sessions_sync.sql"))
-            .execute(&self.pool).await?;
+        // Table de suivi des migrations — créée une seule fois, jamais supprimée.
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS _applied_migrations (version TEXT PRIMARY KEY)",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Bootstrapping : les DBs créées avant l'introduction du suivi de migrations
+        // ont déjà 0001/0002/0003 appliquées. On les marque comme déjà faites si la
+        // table sessions existe et que la colonne synced est présente.
+        let sessions_exists: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sessions'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if sessions_exists > 0 {
+            let has_synced: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='synced'",
+            )
+            .fetch_one(&self.pool)
+            .await?;
+
+            if has_synced > 0 {
+                // Migrations 0001-0003 sont déjà appliquées — les marquer comme faites
+                for v in ["0001", "0002", "0003"] {
+                    sqlx::query("INSERT OR IGNORE INTO _applied_migrations VALUES (?)")
+                        .bind(v)
+                        .execute(&self.pool)
+                        .await?;
+                }
+            }
+        }
+
+        // Charger les versions déjà appliquées
+        let applied: Vec<String> =
+            sqlx::query_scalar("SELECT version FROM _applied_migrations")
+                .fetch_all(&self.pool)
+                .await?;
+
+        let run = |version: &'static str, sql: &'static str| {
+            let applied = &applied;
+            async move {
+                if applied.iter().any(|v| v == version) {
+                    return Ok(());
+                }
+                sqlx::query(sql).execute(&self.pool).await?;
+                sqlx::query("INSERT INTO _applied_migrations VALUES (?)")
+                    .bind(version)
+                    .execute(&self.pool)
+                    .await?;
+                Ok::<(), FiscalError>(())
+            }
+        };
+
+        run("0001", include_str!("../../migrations/0001_initial_schema.sql")).await?;
+        run("0002", include_str!("../../migrations/0002_z_reports_archives.sql")).await?;
+        run("0003", include_str!("../../migrations/0003_sessions_sync.sql")).await?;
+        run("0004", include_str!("../../migrations/0004_z_reports_sync.sql")).await?;
+
         Ok(())
     }
 
@@ -553,6 +609,74 @@ impl JournalStore {
     }
 
     // -----------------------------------------------------------------------
+    // Z-reports — synchronisation (utilisé exclusivement par sync-client)
+    // -----------------------------------------------------------------------
+
+    /// Charge les rapports Z non synchronisés, triés par `session_sequence_number` croissant.
+    ///
+    /// Utilisé par `sync-client` pour pousser les z_reports vers Supabase
+    /// **après** les sessions (FK session_id côté cloud).
+    ///
+    /// # Errors
+    /// `FiscalError::Database` sur erreur SQLite.
+    pub async fn load_unsynced_z_reports(&self) -> Result<Vec<ZReport>, FiscalError> {
+        let rows = sqlx::query(
+            "SELECT id, session_id, session_sequence_number, generated_at_ms,
+                    first_entry_sequence, last_entry_sequence, entry_count,
+                    total_sales_cents, total_refunds_cents, total_cancels_cents, total_discounts_cents,
+                    tva_5_5_ht_cents, tva_5_5_tva_cents, tva_5_5_ttc_cents,
+                    tva_10_ht_cents,  tva_10_tva_cents,  tva_10_ttc_cents,
+                    tva_20_ht_cents,  tva_20_tva_cents,  tva_20_ttc_cents,
+                    closing_hash
+             FROM z_reports
+             WHERE synced = 0
+             ORDER BY session_sequence_number ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|r| z_report_from_row(&r))
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    /// Marque un batch de rapports Z comme synchronisés.
+    ///
+    /// # Arguments
+    /// * `report_ids` - Liste des UUID des rapports Z à marquer.
+    ///
+    /// # Errors
+    /// `FiscalError::Database` sur erreur SQLite.
+    pub async fn mark_z_reports_synced(&self, report_ids: &[Uuid]) -> Result<u64, FiscalError> {
+        if report_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        let placeholders: String = report_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| if i == 0 { "?".to_string() } else { ", ?".to_string() })
+            .collect();
+
+        let sql = format!(
+            "UPDATE z_reports SET synced = 1, synced_at = ? WHERE id IN ({placeholders})"
+        );
+
+        let mut query = sqlx::query(&sql).bind(now_ms);
+        for id in report_ids {
+            query = query.bind(id.to_string());
+        }
+
+        let result = query.execute(&self.pool).await?;
+        Ok(result.rows_affected())
+    }
+
+    // -----------------------------------------------------------------------
     // Transactions SQLite explicites
     // -----------------------------------------------------------------------
 
@@ -747,6 +871,55 @@ fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalEr
     })
 }
 
+fn z_report_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<ZReport, FiscalError> {
+    let id_str: String = row.try_get("id")?;
+    let id = Uuid::parse_str(&id_str).map_err(|e| {
+        FiscalError::Database(sqlx::Error::Protocol(format!("UUID z_report invalide: {e}")))
+    })?;
+
+    let session_id_str: String = row.try_get("session_id")?;
+    let session_uuid = Uuid::parse_str(&session_id_str).map_err(|e| {
+        FiscalError::Database(sqlx::Error::Protocol(format!("UUID session invalide: {e}")))
+    })?;
+
+    let closing_hash_bytes: Vec<u8> = row.try_get("closing_hash")?;
+    let mut closing_hash = [0u8; 32];
+    closing_hash.copy_from_slice(&closing_hash_bytes);
+
+    Ok(ZReport {
+        id,
+        session_id: SessionId(session_uuid),
+        session_sequence_number: { let n: i64 = row.try_get("session_sequence_number")?; n as u64 },
+        generated_at_ms: { let t: i64 = row.try_get("generated_at_ms")?; t as u64 },
+        first_entry_sequence: { let n: i64 = row.try_get("first_entry_sequence")?; n as u64 },
+        last_entry_sequence:  { let n: i64 = row.try_get("last_entry_sequence")?;  n as u64 },
+        entry_count:          { let n: i64 = row.try_get("entry_count")?;          n as u64 },
+        total_sales_cents:    Cents(row.try_get("total_sales_cents")?),
+        total_refunds_cents:  Cents(row.try_get("total_refunds_cents")?),
+        total_cancels_cents:  Cents(row.try_get("total_cancels_cents")?),
+        total_discounts_cents: Cents(row.try_get("total_discounts_cents")?),
+        tva_5_5_breakdown: TvaBreakdown {
+            rate: TvaRate::Reduit5_5,
+            ht_cents:  Cents(row.try_get("tva_5_5_ht_cents")?),
+            tva_cents: Cents(row.try_get("tva_5_5_tva_cents")?),
+            ttc_cents: Cents(row.try_get("tva_5_5_ttc_cents")?),
+        },
+        tva_10_breakdown: TvaBreakdown {
+            rate: TvaRate::Intermediaire10,
+            ht_cents:  Cents(row.try_get("tva_10_ht_cents")?),
+            tva_cents: Cents(row.try_get("tva_10_tva_cents")?),
+            ttc_cents: Cents(row.try_get("tva_10_ttc_cents")?),
+        },
+        tva_20_breakdown: TvaBreakdown {
+            rate: TvaRate::Normal20,
+            ht_cents:  Cents(row.try_get("tva_20_ht_cents")?),
+            tva_cents: Cents(row.try_get("tva_20_tva_cents")?),
+            ttc_cents: Cents(row.try_get("tva_20_ttc_cents")?),
+        },
+        closing_hash,
+    })
+}
+
 /// Calcule le timestamp Unix en millisecondes du 1er janvier d'une année (UTC).
 ///
 /// Utilisé pour filtrer les entrées par année civile dans l'archivage.
@@ -796,6 +969,10 @@ mod tests {
             .execute(&store.pool)
             .await
             .expect("Migration 0003 appliquée");
+        sqlx::query(include_str!("../../migrations/0004_z_reports_sync.sql"))
+            .execute(&store.pool)
+            .await
+            .expect("Migration 0004 appliquée");
         store
     }
 

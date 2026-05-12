@@ -30,7 +30,7 @@ use tracing::{debug, warn};
 use crate::{
     config::SyncConfig,
     error::SyncError,
-    serializer::{FiscalEntryPayload, RemoteConfig},
+    serializer::{FiscalEntryPayload, RemoteConfig, ZReportPayload},
 };
 
 /// Client HTTP pour l'API Supabase REST.
@@ -208,6 +208,60 @@ impl SupabaseClient {
             })
         }
     }    
+
+    // -----------------------------------------------------------------------
+    // Push des rapports Z
+    // -----------------------------------------------------------------------
+
+    /// Pousse un batch de rapports Z vers Supabase.
+    ///
+    /// Idempotent via `ignore-duplicates`. Doit être appelé **après** `push_sessions`
+    /// car la table Supabase a une FK `session_id → sessions.id`.
+    ///
+    /// # Errors
+    /// - `SyncError::Network` sur erreur réseau
+    /// - `SyncError::HttpError` si Supabase retourne un code >= 400
+    pub async fn push_z_reports(&self, payloads: &[ZReportPayload]) -> Result<u64, SyncError> {
+        if payloads.is_empty() {
+            return Ok(0);
+        }
+
+        let url = format!("{}/rest/v1/z_reports", self.base_url);
+        let body = serde_json::to_string(payloads)?;
+
+        debug!(url = %url, count = payloads.len(), "Push batch z_reports");
+
+        let response = self
+            .client
+            .post(&url)
+            .header("apikey", &self.service_key)
+            .header("Authorization", format!("Bearer {}", self.service_key))
+            .header("Content-Type", "application/json")
+            .header("Prefer", "resolution=ignore-duplicates,return=representation")
+            .body(body)
+            .send()
+            .await?;
+
+        let status = response.status();
+
+        if status.is_success() {
+            let inserted_rows: serde_json::Value = response
+                .json()
+                .await
+                .unwrap_or(serde_json::json!([]));
+            let count = inserted_rows.as_array().map(|a| a.len() as u64).unwrap_or(0);
+            debug!(inserted = count, "Z-reports poussés avec succès");
+            Ok(count)
+        } else {
+            let body = response.text().await.unwrap_or_default();
+            warn!(status = %status, body = %body, "Erreur Supabase sur push_z_reports");
+            Err(SyncError::HttpError {
+                status: status.as_u16(),
+                url,
+                body,
+            })
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Pull de la configuration

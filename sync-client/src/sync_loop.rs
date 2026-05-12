@@ -126,7 +126,39 @@ pub async fn run_sync_cycle(
         }
     }
 
-    // 3. Push des entrées non synchronisées par batches
+    // 3. Push des rapports Z non synchronisés (après sessions — FK session_id)
+    let unsynced_z_reports = store.load_unsynced_z_reports().await?;
+
+    if !unsynced_z_reports.is_empty() {
+        let z_report_ids: Vec<uuid::Uuid> = unsynced_z_reports.iter()
+            .map(|r| r.id)
+            .collect();
+
+        let z_report_payloads: Vec<crate::serializer::ZReportPayload> = unsynced_z_reports
+            .iter()
+            .map(|r| crate::serializer::ZReportPayload::from_z_report(r, &config.site_id))
+            .collect();
+
+        match push_z_reports_with_retry(client, &z_report_payloads, config).await {
+            Ok(inserted) => {
+                let marked = store.mark_z_reports_synced(&z_report_ids).await?;
+                metrics.z_reports_pushed += marked;
+                info!(
+                    inserted = inserted,
+                    marked = marked,
+                    "Rapports Z synchronisés avec succès"
+                );
+            }
+            Err(e) => {
+                error!(error = %e, "Rapports Z échoués — cycle interrompu");
+                metrics.batches_failed += 1;
+                metrics.duration_ms = cycle_start.elapsed().as_millis() as u64;
+                return Ok(metrics);
+            }
+        }
+    }
+
+    // 5. Push des entrées non synchronisées par batches
     loop {
         let entries = store.load_unsynced_entries(config.batch_size).await?;
 
@@ -175,7 +207,7 @@ pub async fn run_sync_cycle(
         }
     }
 
-    // 4. Pull de la configuration (si aucun batch n'a échoué)
+    // 6. Pull de la configuration (si aucun batch n'a échoué)
     if metrics.batches_failed == 0 {
         match pull_and_apply_config(client, config).await {
             Ok(true) => {
@@ -194,12 +226,13 @@ pub async fn run_sync_cycle(
     metrics.duration_ms = cycle_start.elapsed().as_millis() as u64;
 
     info!(
-        sessions_pushed = metrics.sessions_pushed,
-        entries_pushed = metrics.entries_pushed,
-        batches_pushed = metrics.batches_pushed,
-        batches_failed = metrics.batches_failed,
-        duration_ms = metrics.duration_ms,
-        config_updated = metrics.config_updated,
+        sessions_pushed  = metrics.sessions_pushed,
+        z_reports_pushed = metrics.z_reports_pushed,
+        entries_pushed   = metrics.entries_pushed,
+        batches_pushed   = metrics.batches_pushed,
+        batches_failed   = metrics.batches_failed,
+        duration_ms      = metrics.duration_ms,
+        config_updated   = metrics.config_updated,
         "Cycle de synchronisation terminé"
     );
 
@@ -243,6 +276,42 @@ async fn push_sessions_with_retry(
     Err(last_err.unwrap_or(SyncError::Timeout {
         seconds: 0,
         operation: "push_sessions_with_retry".to_string(),
+    }))
+}
+
+/// Pousse les rapports Z vers Supabase avec retry et backoff exponentiel.
+async fn push_z_reports_with_retry(
+    client: &SupabaseClient,
+    payloads: &[crate::serializer::ZReportPayload],
+    config: &SyncConfig,
+) -> Result<u64, SyncError> {
+    let mut last_err: Option<SyncError> = None;
+
+    for attempt in 0..config.max_retries {
+        match client.push_z_reports(payloads).await {
+            Ok(inserted) => return Ok(inserted),
+            Err(e) if e.is_transient() => {
+                let backoff = config.backoff_duration(attempt);
+                warn!(
+                    attempt = attempt + 1,
+                    max = config.max_retries,
+                    backoff_ms = backoff.as_millis(),
+                    error = %e,
+                    "Erreur transitoire z_reports — retry"
+                );
+                tokio::time::sleep(backoff).await;
+                last_err = Some(e);
+            }
+            Err(e) => {
+                error!(error = %e, "Erreur non-transitoire z_reports — abandon");
+                return Err(e);
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or(SyncError::Timeout {
+        seconds: 0,
+        operation: "push_z_reports_with_retry".to_string(),
     }))
 }
 
@@ -306,6 +375,8 @@ fn build_payloads(
 pub struct CycleMetrics {
     /// Nombre de sessions poussées vers Supabase.
     pub sessions_pushed: u64,
+    /// Nombre de rapports Z poussés vers Supabase.
+    pub z_reports_pushed: u64,
     /// Nombre total d'entrées poussées vers Supabase.
     pub entries_pushed: u64,
     /// Nombre de batches poussés avec succès.

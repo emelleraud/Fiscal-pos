@@ -33,7 +33,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use fiscal_engine::{hex_encode, types::tva::TvaRate, FiscalEntry};
+use fiscal_engine::{hex_encode, types::tva::TvaRate, types::z_report::ZReport, FiscalEntry};
 
 // ---------------------------------------------------------------------------
 // Helpers de conversion
@@ -273,6 +273,69 @@ impl SessionPayload {
     }
 }
     
+// ---------------------------------------------------------------------------
+// Payload d'un rapport Z vers Supabase
+// ---------------------------------------------------------------------------
+
+/// Représentation JSON d'un `ZReport` pour l'API Supabase REST.
+///
+/// Colonnes cibles : `public.z_reports`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZReportPayload {
+    pub id:              String,
+    pub site_id:         String,
+    pub session_id:      String,
+    pub report_number:   i64,
+    pub generated_at:    String,
+    pub total_sales:     i64,
+    pub total_refunds:   i64,
+    pub total_discounts: i64,
+    pub net_revenue:     i64,
+    pub tva_5_5_base_ht: i64,
+    pub tva_5_5_amount:  i64,
+    pub tva_10_base_ht:  i64,
+    pub tva_10_amount:   i64,
+    pub tva_20_base_ht:  i64,
+    pub tva_20_amount:   i64,
+    pub entry_count:     i64,
+    pub first_sequence:  Option<i64>,
+    pub last_sequence:   Option<i64>,
+    pub report_hash:     Option<String>,
+}
+
+impl ZReportPayload {
+    /// Construit un payload depuis un `ZReport` et l'identifiant du site.
+    ///
+    /// `total_refunds` agrège remboursements + annulations (la table Supabase
+    /// n'a pas de colonne `total_cancels` distincte).
+    #[must_use]
+    pub fn from_z_report(report: &ZReport, site_id: &str) -> Self {
+        let total_refunds = report.total_refunds_cents.0 + report.total_cancels_cents.0;
+        let net_revenue   = report.total_sales_cents.0 - total_refunds - report.total_discounts_cents.0;
+        Self {
+            id:              report.id.to_string(),
+            site_id:         site_id.to_string(),
+            session_id:      report.session_id.0.to_string(),
+            report_number:   report.session_sequence_number as i64,
+            generated_at:    ms_to_iso8601(report.generated_at_ms),
+            total_sales:     report.total_sales_cents.0,
+            total_refunds,
+            total_discounts: report.total_discounts_cents.0,
+            net_revenue,
+            tva_5_5_base_ht: report.tva_5_5_breakdown.ht_cents.0,
+            tva_5_5_amount:  report.tva_5_5_breakdown.tva_cents.0,
+            tva_10_base_ht:  report.tva_10_breakdown.ht_cents.0,
+            tva_10_amount:   report.tva_10_breakdown.tva_cents.0,
+            tva_20_base_ht:  report.tva_20_breakdown.ht_cents.0,
+            tva_20_amount:   report.tva_20_breakdown.tva_cents.0,
+            entry_count:     report.entry_count as i64,
+            first_sequence:  Some(report.first_entry_sequence as i64),
+            last_sequence:   Some(report.last_entry_sequence as i64),
+            report_hash:     Some(hex_encode(&report.closing_hash)),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Payload de configuration reçue depuis Supabase (pull)
 // ---------------------------------------------------------------------------
