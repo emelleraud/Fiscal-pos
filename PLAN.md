@@ -1,80 +1,67 @@
 # Plan de développement — pos-fiscal
-_Mis à jour le 2026-05-13_
+_Mis à jour le 2026-05-21_
 
 ---
 
 ## État du projet
 
-| Composant        | État                                                                 | Tests          |
-|------------------|----------------------------------------------------------------------|----------------|
-| fiscal-engine    | Complet — moteur NF525, hash chain, TVA, Z-reports, archives        | 132 ✅          |
-| sync-client      | Complet — sync sessions + z_reports + entries, idempotence, offline | 34 ✅ + 2 E2E   |
-| edge-api         | Opérationnel — sessions, orders, menu, health                       | 0 tests        |
-| backoffice       | Dashboard + Journal + Rapports Z visibles via anon key              | —              |
-| pos-app          | Écrans Order/Payment/Ticket existants, wiring partiel               | 24 ✅           |
-| Supabase         | 6 migrations, RLS, vues SECURITY DEFINER, z_reports anon            | —              |
+| Composant        | État                                                                      | Tests           |
+|------------------|---------------------------------------------------------------------------|-----------------|
+| fiscal-engine    | Complet — moteur NF525, hash chain, multi-TVA, Z-reports, archives       | ~132 ✅          |
+| sync-client      | Complet — sync sessions + z_reports + entries, idempotence, offline       | ~34 ✅ + 2 E2E   |
+| edge-api         | Complet — sessions, orders, menu, health, archive NF525 §7               | 18 ✅            |
+| backoffice       | Dashboard + Journal + Rapports Z visibles via anon key                    | —               |
+| pos-app          | Écrans Order/Payment/Ticket/ZReport/Cancel câblés, multi-TVA             | ~24 ✅           |
+| Supabase         | 8 migrations, RLS, vues SECURITY DEFINER, site_configs seedé             | —               |
 
 ---
 
-## Sprint 1 — Bugs bloquants + conformité fiscale
+## Sprint 1 — Bugs bloquants + conformité fiscale ✅
 
-### A — ZReportScreen : clôture non câblée
-`ZReportScreen` (dans `TicketScreen.tsx`) accède à `useSessionStore` directement avec
-`closeSession: null as unknown as () => void`. Le bouton "Clôturer" est mort.
-**Fix** : remplacer par `useSession()` depuis `hooks/useOrder.ts`.
+### A — ZReportScreen : clôture câblée ✅
+`useSession()` depuis `hooks/useOrder.ts`. Ventilation TVA par taux affichée.
 
-### B — CancelScreen : annulation non câblée
-Même problème : `cancelOrder: null as unknown as (r: string) => void`.
-Le bouton "Confirmer l'annulation" ne fait rien.
-**Fix** : utiliser `useOrder()` directement dans le composant.
+### B — CancelScreen : annulation câblée ✅
+`useOrder()` utilisé directement dans le composant.
 
-### C — Conformité NF525 : panier multi-TVA (une entrée par taux)
-`useOrder.submitMutation` appelle `createOrder()` une seule fois avec `dominantTvaRate()`.
-Un panier [Burger×2 @20%, Coca×1 @10%] génère une seule entrée au taux majoritaire — incorrect.
-**Fix** : grouper les articles du panier par `tva_rate`, émettre un `POST /orders` par groupe.
-```
-panier: [Burger×2 @20%, Coca×1 @10%]
-→ POST /orders {amount: 2400, tva_rate: "20"}  → entry #N
-→ POST /orders {amount: 200,  tva_rate: "10"}  → entry #N+1
-```
-Impact : `TicketScreen` affiche `currentFiscalEntries[]` au lieu d'une seule entrée.
+### C — Conformité NF525 : multi-TVA ✅
+`CreateOrderRequest` envoie `line_items[]` par article. Le handler agrège par taux et stocke
+`tva_5_5_breakdown`, `tva_10_breakdown`, `tva_20_breakdown` dans `FiscalEntry`.
+Hash NF525 inchangé (figé pour certification LNE).
 
 ---
 
-## Sprint 2 — Qualité opérationnelle
+## Sprint 2 — Qualité opérationnelle ✅
 
-### D — Sécuriser delete_test_data()
-`public.delete_test_data(p_site_id uuid)` accessible sans restriction via l'API REST.
-**Fix** : migration 007 — renommer en `delete_test_data_dev()` + `REVOKE EXECUTE FROM anon, authenticated`.
+### D — Sécuriser delete_test_data() ✅
+Migration 007 — `REVOKE EXECUTE FROM PUBLIC, anon, authenticated` + `GRANT TO service_role`.
 
-### E — Menu de démo + seed Supabase
-La caisse affiche une carte vide si `menu.json` est absent.
-`config_puller` tire la carte de `site_configs` mais cette table est vide.
-**Fix** : créer `data/menu.json` de démo (5-6 articles QSR) + seed `site_configs` pour le site de test.
+### E — Menu de démo + seed Supabase ✅
+- `data/menu.json` : 7 articles QSR (Burgers, Accompagnements, Boissons, Desserts)
+- Migration 008 : table `site_configs` + seed pour le site de test `9983f3ac-...`
+- `GET /api/v1/menu` sert le fichier local ; sync-client le met à jour depuis Supabase.
 
-### F — Tests edge-api
-Zéro test dans `edge-api/src/`. Risque de régression silencieuse.
-**Fix** : tester les 4 routes critiques (`open_session`, `close_session`, `create_order`, `cancel_order`)
-avec un store SQLite in-memory (pattern identique aux tests fiscal-engine).
+### F — Tests edge-api ✅
+18 tests d'intégration Axum oneshot couvrant toutes les routes critiques.
+SQLite tempfile pour éviter le deadlock `max_connections(1)`.
 
-### G — CLAUDE.md
-Fichier de contexte projet manquant — chaque session Claude repart de zéro.
-**Contenu** : architecture des crates, variables d'env, commandes build/test/run,
-procédure de lancement complète (edge-api + sync-client + backoffice + pos-app).
+### G — CLAUDE.md ✅
+Créé à la racine — architecture, commandes, variables d'env, migrations, conventions NF525.
 
 ---
 
-## Sprint 3 — Complétion NF525
+## Sprint 3 — Complétion NF525 ✅
 
-### H — Archive engine
-`archive_engine` existe dans `fiscal-engine` mais n'est pas déclenché.
-L'archivage annuel CSV (NF525 §8) doit être activé : route manager dans edge-api
-ou tâche planifiée dans sync-client (déclenchement au 1er janvier ou manuel).
+### H — Archive engine ✅
+`POST /api/v1/archive/{year}` — génère le CSV annuel signé Ed25519 (NF525 §7).
+- Clé lue depuis `FISCAL_SIGNING_KEY_HEX` (64 hex chars).
+- CSV écrit dans `{DATA_DIR}/archives/{year}.csv`.
+- Métadonnées dans `archive_metadata` SQLite (idempotent : 409 si déjà présent).
 
-### I — Electron preload.js manquant
-`electron/main.ts` référence `preload.js` mais le fichier est absent du repo.
-**Fix** : créer `electron/preload.ts` avec `contextBridge` minimal (même vide),
-sinon le build Electron plante.
+### I — Electron preload.ts ✅
+- `electron/preload.ts` : `contextBridge` exposant `getApiUrl` et `printText`.
+- `tsconfig.electron.json` : compilation CommonJS in-place → `electron/main.js` + `preload.js`.
+- Scripts `electron:dev` et `electron:build` compilent le process Electron avant de démarrer.
 
 ---
 
@@ -82,18 +69,22 @@ sinon le build Electron plante.
 
 - Authentification back-office (rôle admin vs auditeur)
 - Multi-sites : le back-office affiche toutes les données sans filtre `site_id`
-- Impression thermique réelle (ESC/POS via Electron IPC)
+- Impression thermique réelle (ESC/POS via Electron IPC — `printText` IPC câblé, driver manquant)
 - Intégration TPE (Ingenico/Verifone)
 - Remboursements et remises via pos-app (routes edge-api existantes, UI manquante)
 - Gestion du menu depuis le back-office (CRUD `site_configs`)
+- Génération automatique de la clé `FISCAL_SIGNING_KEY_HEX` au premier démarrage
+- Déclenchement automatique de l'archive au 1er janvier (tâche planifiée sync-client)
 
 ---
 
 ## Points d'attention permanents
 
 - `SUPABASE_SERVICE_KEY` ne doit jamais être committée (`.env.test` ignoré par git)
+- `FISCAL_SIGNING_KEY_HEX` ne doit jamais être committée
 - `fiscal_entries` est immuable côté Supabase (trigger `prevent_delete` actif)
 - Ordre de sync : **sessions → z_reports → fiscal_entries** (FK cloud)
-- `run_migrations` utilise `_applied_migrations` pour être idempotent (depuis 2026-05-13)
+- `run_migrations` utilise `_applied_migrations` pour être idempotent
 - Site de test UUID : `9983f3ac-cde8-4838-9386-49ef24f57dad`
 - Supabase project ref : `iawyngsvqjsogvkwkrxw`
+- Hash NF525 figé pour certification LNE — ne pas modifier `HashInput`
