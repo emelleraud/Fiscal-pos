@@ -150,17 +150,6 @@ export function useOrder() {
   const navigateTo = useUiStore((s) => s.navigateTo);
   const setGlobalError = useUiStore((s) => s.setGlobalError);
 
-  // Taux de TVA dominant du panier (le plus fréquent)
-  const dominantTvaRate = (): '5.5' | '10' | '20' => {
-    if (cart.length === 0) return '10';
-    const counts = { '5.5': 0, '10': 0, '20': 0 };
-    for (const item of cart) {
-      const rate = menuTvaRateToApi(item.menuItem.tva_rate);
-      counts[rate]++;
-    }
-    return (Object.entries(counts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? '10') as '5.5' | '10' | '20';
-  };
-
   // Soumission fiscale de la commande (enregistrement dans le journal)
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -169,8 +158,10 @@ export function useOrder() {
 
       return createOrder({
         order_reference: generateOrderRef(),
-        amount_ttc_cents: totalCents,
-        tva_rate: dominantTvaRate(),
+        line_items: cart.map(({ menuItem, quantity }) => ({
+          amount_ttc_cents: menuItem.price_ttc_cents * quantity,
+          tva_rate: menuTvaRateToApi(menuItem.tva_rate),
+        })),
         payment_method: 'card', // Sera confirmé à l'étape paiement
       });
     },
@@ -215,6 +206,9 @@ export function useOrder() {
         fiscal_entry_id: currentFiscalEntry.id,
         amount_ttc_cents: currentFiscalEntry.amount_ttc_cents,
         tva_rate: currentFiscalEntry.tva_rate as '5.5' | '10' | '20',
+        tva_5_5_amount_ttc: currentFiscalEntry.tva_5_5_ht_cents + currentFiscalEntry.tva_5_5_tva_cents || undefined,
+        tva_10_amount_ttc: currentFiscalEntry.tva_10_ht_cents + currentFiscalEntry.tva_10_tva_cents || undefined,
+        tva_20_amount_ttc: currentFiscalEntry.tva_20_ht_cents + currentFiscalEntry.tva_20_tva_cents || undefined,
       });
     },
     onSuccess: () => {

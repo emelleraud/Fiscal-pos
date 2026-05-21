@@ -16,7 +16,7 @@ import React, { useState } from 'react';
 import { useOrder } from '@/hooks/useOrder';
 import { useUiStore } from '@/store';
 import { Header, StatusBar } from '@/components/layout/Header';
-import { Button, AlertBanner } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { formatCents } from '@/api/client';
 
 type Method = 'card' | 'cash' | 'meal_voucher';
@@ -27,7 +27,6 @@ const CASH_PRESETS = [500, 1000, 2000, 5000]; // centimes : 5€, 10€, 20€, 
 export function PaymentScreen(): React.ReactElement {
   const order = useOrder();
   const navigateTo = useUiStore((s) => s.navigateTo);
-  const globalError = useUiStore((s) => s.setGlobalError);
 
   // Saisie espèces
   const [cashInput, setCashInput] = useState('');

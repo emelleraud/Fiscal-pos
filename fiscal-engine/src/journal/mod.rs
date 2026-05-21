@@ -239,6 +239,9 @@ impl Journal {
     ///     operation_type: OperationType::Sale,
     ///     amount_ttc_cents: Cents(1100),
     ///     tva_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+    ///     tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+    ///     tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+    ///     tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
     ///     reason: None,
     ///     order_reference: Some("ORD-001".to_string()),
     /// }).await?;
@@ -306,6 +309,9 @@ impl Journal {
                 operation_type: data.operation_type,
                 amount_ttc_cents: data.amount_ttc_cents,
                 tva_breakdown: data.tva_breakdown,
+                tva_5_5_breakdown: data.tva_5_5_breakdown,
+                tva_10_breakdown: data.tva_10_breakdown,
+                tva_20_breakdown: data.tva_20_breakdown,
                 reason: data.reason,
                 order_reference: data.order_reference,
                 hash,
@@ -363,6 +369,9 @@ impl Journal {
             operation_type: OperationType::ZClose,
             amount_ttc_cents: Cents::ZERO,
             tva_breakdown: TvaBreakdown::from_ttc(Cents::ZERO, crate::types::tva::TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(crate::types::tva::TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::zero(crate::types::tva::TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(crate::types::tva::TvaRate::Normal20),
             reason: None,
             order_reference: None,
         };
@@ -510,7 +519,11 @@ mod tests {
         sqlx::query(include_str!("../../migrations/0001_initial_schema.sql"))
             .execute(store.pool_ref())
             .await
-            .expect("Migration");
+            .expect("Migration 0001");
+        sqlx::query(include_str!("../../migrations/0005_multi_tva.sql"))
+            .execute(store.pool_ref())
+            .await
+            .expect("Migration 0005");
 
         Journal::from_store(store).await.expect("Journal")
     }
@@ -521,6 +534,9 @@ mod tests {
             operation_type: OperationType::Sale,
             amount_ttc_cents: Cents(amount),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: crate::types::tva::TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_20_breakdown: crate::types::tva::TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: Some("ORD-TEST".to_string()),
         }
@@ -532,6 +548,9 @@ mod tests {
             operation_type: OperationType::Refund,
             amount_ttc_cents: Cents(amount),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: crate::types::tva::TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_20_breakdown: crate::types::tva::TvaBreakdown::zero(TvaRate::Normal20),
             reason: Some("Erreur de commande".to_string()),
             order_reference: None,
         }

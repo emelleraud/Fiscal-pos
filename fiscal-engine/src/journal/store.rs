@@ -140,6 +140,7 @@ impl JournalStore {
         run("0002", include_str!("../../migrations/0002_z_reports_archives.sql")).await?;
         run("0003", include_str!("../../migrations/0003_sessions_sync.sql")).await?;
         run("0004", include_str!("../../migrations/0004_z_reports_sync.sql")).await?;
+        run("0005", include_str!("../../migrations/0005_multi_tva.sql")).await?;
 
         Ok(())
     }
@@ -360,6 +361,9 @@ impl JournalStore {
         let rows = sqlx::query(
             "SELECT id, sequence_number, session_id, operation_type,
                     amount_ttc_cents, ht_cents, tva_cents, tva_rate,
+                    tva_5_5_ht_cents, tva_5_5_tva_cents,
+                    tva_10_ht_cents,  tva_10_tva_cents,
+                    tva_20_ht_cents,  tva_20_tva_cents,
                     hash, previous_hash, created_at_ms, reason, order_reference, synced
              FROM fiscal_entries
              WHERE session_id = ?
@@ -384,6 +388,9 @@ impl JournalStore {
         let rows = sqlx::query(
             "SELECT id, sequence_number, session_id, operation_type,
                     amount_ttc_cents, ht_cents, tva_cents, tva_rate,
+                    tva_5_5_ht_cents, tva_5_5_tva_cents,
+                    tva_10_ht_cents,  tva_10_tva_cents,
+                    tva_20_ht_cents,  tva_20_tva_cents,
                     hash, previous_hash, created_at_ms, reason, order_reference, synced
              FROM fiscal_entries
              ORDER BY sequence_number ASC",
@@ -412,6 +419,9 @@ impl JournalStore {
         let rows = sqlx::query(
             "SELECT id, sequence_number, session_id, operation_type,
                     amount_ttc_cents, ht_cents, tva_cents, tva_rate,
+                    tva_5_5_ht_cents, tva_5_5_tva_cents,
+                    tva_10_ht_cents,  tva_10_tva_cents,
+                    tva_20_ht_cents,  tva_20_tva_cents,
                     hash, previous_hash, created_at_ms, reason, order_reference, synced
              FROM fiscal_entries
              WHERE synced = 0
@@ -445,6 +455,9 @@ impl JournalStore {
         let rows = sqlx::query(
             "SELECT id, sequence_number, session_id, operation_type,
                     amount_ttc_cents, ht_cents, tva_cents, tva_rate,
+                    tva_5_5_ht_cents, tva_5_5_tva_cents,
+                    tva_10_ht_cents,  tva_10_tva_cents,
+                    tva_20_ht_cents,  tva_20_tva_cents,
                     hash, previous_hash, created_at_ms, reason, order_reference, synced
              FROM fiscal_entries
              WHERE created_at_ms >= ? AND created_at_ms < ?
@@ -485,8 +498,11 @@ impl JournalStore {
             "INSERT INTO fiscal_entries
              (id, sequence_number, session_id, operation_type,
               amount_ttc_cents, ht_cents, tva_cents, tva_rate,
+              tva_5_5_ht_cents, tva_5_5_tva_cents,
+              tva_10_ht_cents,  tva_10_tva_cents,
+              tva_20_ht_cents,  tva_20_tva_cents,
               hash, previous_hash, created_at_ms, reason, order_reference, synced)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
         )
         .bind(entry.id.0.to_string())
         .bind(entry.sequence_number as i64)
@@ -496,6 +512,12 @@ impl JournalStore {
         .bind(entry.tva_breakdown.ht_cents.0)
         .bind(entry.tva_breakdown.tva_cents.0)
         .bind(tva_rate_str)
+        .bind(entry.tva_5_5_breakdown.ht_cents.0)
+        .bind(entry.tva_5_5_breakdown.tva_cents.0)
+        .bind(entry.tva_10_breakdown.ht_cents.0)
+        .bind(entry.tva_10_breakdown.tva_cents.0)
+        .bind(entry.tva_20_breakdown.ht_cents.0)
+        .bind(entry.tva_20_breakdown.tva_cents.0)
         .bind(entry.hash.as_ref())
         .bind(entry.previous_hash.as_ref())
         .bind(entry.created_at_ms as i64)
@@ -839,6 +861,33 @@ fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalEr
         ttc_cents: Cents(amount_ttc_cents),
     };
 
+    // Colonnes multi-TVA (migration 0005)
+    let tva_5_5_ht: i64 = row.try_get("tva_5_5_ht_cents")?;
+    let tva_5_5_tva: i64 = row.try_get("tva_5_5_tva_cents")?;
+    let tva_10_ht: i64 = row.try_get("tva_10_ht_cents")?;
+    let tva_10_tva: i64 = row.try_get("tva_10_tva_cents")?;
+    let tva_20_ht: i64 = row.try_get("tva_20_ht_cents")?;
+    let tva_20_tva: i64 = row.try_get("tva_20_tva_cents")?;
+
+    let tva_5_5_breakdown = TvaBreakdown {
+        rate: TvaRate::Reduit5_5,
+        ht_cents: Cents(tva_5_5_ht),
+        tva_cents: Cents(tva_5_5_tva),
+        ttc_cents: Cents(tva_5_5_ht + tva_5_5_tva),
+    };
+    let tva_10_breakdown = TvaBreakdown {
+        rate: TvaRate::Intermediaire10,
+        ht_cents: Cents(tva_10_ht),
+        tva_cents: Cents(tva_10_tva),
+        ttc_cents: Cents(tva_10_ht + tva_10_tva),
+    };
+    let tva_20_breakdown = TvaBreakdown {
+        rate: TvaRate::Normal20,
+        ht_cents: Cents(tva_20_ht),
+        tva_cents: Cents(tva_20_tva),
+        ttc_cents: Cents(tva_20_ht + tva_20_tva),
+    };
+
     let hash_bytes: Vec<u8> = row.try_get("hash")?;
     let mut hash = [0u8; 32];
     hash.copy_from_slice(&hash_bytes);
@@ -859,6 +908,9 @@ fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalEr
         operation_type,
         amount_ttc_cents: Cents(amount_ttc_cents),
         tva_breakdown,
+        tva_5_5_breakdown,
+        tva_10_breakdown,
+        tva_20_breakdown,
         reason: row.try_get("reason")?,
         order_reference: row.try_get("order_reference")?,
         hash,
@@ -973,6 +1025,10 @@ mod tests {
             .execute(&store.pool)
             .await
             .expect("Migration 0004 appliquée");
+        sqlx::query(include_str!("../../migrations/0005_multi_tva.sql"))
+            .execute(&store.pool)
+            .await
+            .expect("Migration 0005 appliquée");
         store
     }
 

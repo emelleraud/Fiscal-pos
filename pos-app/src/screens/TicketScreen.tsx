@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { useOrderStore, useSessionStore, useUiStore } from '@/store';
+import { useSession, useOrder } from '@/hooks/useOrder';
 import { Header, StatusBar } from '@/components/layout/Header';
 import { Button, Badge } from '@/components/ui';
 import { formatCents, formatTimestamp } from '@/api/client';
@@ -146,14 +147,7 @@ export function CancelScreen(): React.ReactElement {
   const [reason, setReason] = React.useState('');
   const [confirmed, setConfirmed] = React.useState(false);
 
-  const { cancelOrder, isCancelling, currentFiscalEntry, currentOrderId } = useOrderStore(
-    (s) => ({
-      cancelOrder: null as unknown as (r: string) => void, // sera fourni par useOrder
-      isCancelling: false,
-      currentFiscalEntry: s.currentFiscalEntry,
-      currentOrderId: s.currentOrderId,
-    })
-  );
+  const { cancelOrder, isCancelling, currentFiscalEntry } = useOrder();
 
   const navigateTo = useUiStore((s) => s.navigateTo);
 
@@ -255,7 +249,7 @@ export function CancelScreen(): React.ReactElement {
           fullWidth
           disabled={!canCancel}
           loading={isCancelling}
-          onClick={() => void 0 /* cancelOrder(reason) — fourni par useOrder */}
+          onClick={() => cancelOrder(reason)}
         >
           Confirmer l'annulation
         </Button>
@@ -275,10 +269,7 @@ export function ZReportScreen(): React.ReactElement {
   const lastZReportText = useUiStore((s) => s.lastZReportText);
   const clearZReport = useUiStore((s) => s.clearZReport);
   const navigateTo = useUiStore((s) => s.navigateTo);
-  const { closeSession, isClosing } = useSessionStore((s) => ({
-    closeSession: null as unknown as () => void,
-    isClosing: false,
-  }));
+  const { closeSession, isClosing } = useSession();
   const session = useSessionStore((s) => s.session);
 
   const handlePrint = () => {
@@ -332,6 +323,23 @@ export function ZReportScreen(): React.ReactElement {
                 Séquences {lastZReport.first_sequence} → {lastZReport.last_sequence}
               </p>
             </div>
+
+            {/* Ventilation TVA */}
+            <div className="bg-gray-800 rounded-2xl p-4 space-y-2 text-sm">
+              <p className="text-gray-500 uppercase tracking-wider text-xs">Ventilation TVA (NF525)</p>
+              {[
+                { label: '5,5%', ht: lastZReport.tva_5_5_ht_cents, tva: lastZReport.tva_5_5_tva_cents, ttc: lastZReport.tva_5_5_ht_cents + lastZReport.tva_5_5_tva_cents },
+                { label: '10%',  ht: lastZReport.tva_10_ht_cents,  tva: lastZReport.tva_10_tva_cents,  ttc: lastZReport.tva_10_ht_cents + lastZReport.tva_10_tva_cents },
+                { label: '20%',  ht: lastZReport.tva_20_ht_cents,  tva: lastZReport.tva_20_tva_cents,  ttc: lastZReport.tva_20_ht_cents + lastZReport.tva_20_tva_cents },
+              ].filter(r => r.ttc > 0).map(({ label, ht, tva, ttc }) => (
+                <div key={label} className="flex justify-between text-xs">
+                  <span className="text-gray-400 w-10">{label}</span>
+                  <span className="text-gray-500">HT {formatCents(ht)}</span>
+                  <span className="text-gray-500">TVA {formatCents(tva)}</span>
+                  <span className="text-gray-300 font-mono">TTC {formatCents(ttc)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         ) : session ? (
           // Aucun rapport Z — proposition de clôturer
@@ -368,6 +376,7 @@ export function ZReportScreen(): React.ReactElement {
               size="xl"
               fullWidth
               loading={isClosing}
+              onClick={() => closeSession()}
             >
               Clôturer et générer le rapport Z
             </Button>

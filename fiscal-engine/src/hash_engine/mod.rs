@@ -500,6 +500,18 @@ pub fn build_entry_for_test(
         operation_type,
         amount_ttc_cents: Cents(amount_ttc_cents),
         tva_breakdown,
+        tva_5_5_breakdown: match tva_rate {
+            TvaRate::Reduit5_5 => tva_breakdown,
+            _ => TvaBreakdown::zero(TvaRate::Reduit5_5),
+        },
+        tva_10_breakdown: match tva_rate {
+            TvaRate::Intermediaire10 => tva_breakdown,
+            _ => TvaBreakdown::zero(TvaRate::Intermediaire10),
+        },
+        tva_20_breakdown: match tva_rate {
+            TvaRate::Normal20 => tva_breakdown,
+            _ => TvaBreakdown::zero(TvaRate::Normal20),
+        },
         reason: None,
         order_reference: None,
         hash,

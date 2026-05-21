@@ -218,6 +218,22 @@ impl TvaBreakdown {
         }
     }
 
+    /// Construit une décomposition nulle pour un taux donné (tous les montants à 0).
+    ///
+    /// Utilisé pour les entrées à taux unique où les autres taux sont non applicables.
+    ///
+    /// # Arguments
+    /// * `rate` - Taux de TVA à conserver (pour l'identification du taux).
+    #[must_use]
+    pub fn zero(rate: TvaRate) -> Self {
+        Self {
+            rate,
+            ht_cents: Cents(0),
+            tva_cents: Cents(0),
+            ttc_cents: Cents(0),
+        }
+    }
+
     /// Construit une décomposition à partir d'un montant HT et d'un taux.
     ///
     /// # Arguments

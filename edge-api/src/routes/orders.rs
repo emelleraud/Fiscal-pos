@@ -48,15 +48,22 @@ use fiscal_engine::{
 // DTOs de requête
 // ---------------------------------------------------------------------------
 
+/// Article de commande avec montant et taux de TVA.
+#[derive(Debug, Deserialize)]
+pub struct LineItem {
+    /// Montant TTC en centimes pour cet article (quantité incluse).
+    pub amount_ttc_cents: i64,
+    /// Taux de TVA applicable à cet article.
+    pub tva_rate: TvaRateRequest,
+}
+
 /// Corps de la requête de création de commande.
 #[derive(Debug, Deserialize)]
 pub struct CreateOrderRequest {
     /// Référence interne de la commande (générée par le frontend).
     pub order_reference: String,
-    /// Montant TTC en centimes (positif).
-    pub amount_ttc_cents: i64,
-    /// Taux de TVA applicable.
-    pub tva_rate: TvaRateRequest,
+    /// Articles de la commande avec leurs taux de TVA respectifs.
+    pub line_items: Vec<LineItem>,
     /// Moyen de paiement prévu (informatif, pas fiscal).
     /// Stocké pour la traçabilité mais non utilisé dans la logique fiscale MVP.
     #[allow(dead_code)]
@@ -81,8 +88,14 @@ pub struct CancelOrderRequest {
     pub fiscal_entry_id: String,
     /// Montant à annuler en centimes (négatif ou positif — on l'inversera).
     pub amount_ttc_cents: i64,
-    /// Taux de TVA de l'entrée annulée.
+    /// Taux de TVA de l'entrée annulée (fallback mono-taux).
     pub tva_rate: TvaRateRequest,
+    /// Montant TTC annulé au taux 5,5% (optionnel — pour les annulations multi-taux).
+    pub tva_5_5_amount_ttc: Option<i64>,
+    /// Montant TTC annulé au taux 10% (optionnel — pour les annulations multi-taux).
+    pub tva_10_amount_ttc: Option<i64>,
+    /// Montant TTC annulé au taux 20% (optionnel — pour les annulations multi-taux).
+    pub tva_20_amount_ttc: Option<i64>,
 }
 
 /// Taux de TVA dans les requêtes JSON.
@@ -159,12 +172,24 @@ pub struct FiscalEntryResponse {
     pub operation_type: String,
     /// Montant TTC en centimes.
     pub amount_ttc_cents: i64,
-    /// Montant HT en centimes.
+    /// Montant HT en centimes (taux dominant).
     pub ht_cents: i64,
-    /// Montant TVA en centimes.
+    /// Montant TVA en centimes (taux dominant).
     pub tva_cents: i64,
-    /// Taux de TVA appliqué.
+    /// Taux de TVA dominant.
     pub tva_rate: String,
+    /// Ventilation TVA 5,5% — HT en centimes.
+    pub tva_5_5_ht_cents: i64,
+    /// Ventilation TVA 5,5% — TVA en centimes.
+    pub tva_5_5_tva_cents: i64,
+    /// Ventilation TVA 10% — HT en centimes.
+    pub tva_10_ht_cents: i64,
+    /// Ventilation TVA 10% — TVA en centimes.
+    pub tva_10_tva_cents: i64,
+    /// Ventilation TVA 20% — HT en centimes.
+    pub tva_20_ht_cents: i64,
+    /// Ventilation TVA 20% — TVA en centimes.
+    pub tva_20_tva_cents: i64,
     /// Hash SHA-256 de l'entrée (hex, 64 caractères).
     pub hash_hex: String,
     /// Timestamp de création en millisecondes Unix.
@@ -186,6 +211,12 @@ impl From<&FiscalEntry> for FiscalEntryResponse {
                 TvaRate::Normal20 => "20".to_string(),
                 _ => "10".to_string(),
             },
+            tva_5_5_ht_cents: e.tva_5_5_breakdown.ht_cents.0,
+            tva_5_5_tva_cents: e.tva_5_5_breakdown.tva_cents.0,
+            tva_10_ht_cents: e.tva_10_breakdown.ht_cents.0,
+            tva_10_tva_cents: e.tva_10_breakdown.tva_cents.0,
+            tva_20_ht_cents: e.tva_20_breakdown.ht_cents.0,
+            tva_20_tva_cents: e.tva_20_breakdown.tva_cents.0,
             hash_hex: hex_encode(&e.hash),
             created_at_ms: e.created_at_ms,
         }
@@ -227,13 +258,56 @@ pub async fn create_order_handler(
     Json(body): Json<CreateOrderRequest>,
 ) -> Result<(StatusCode, Json<OrderResponse>), ApiErr> {
     let session_id = require_active_session(&state).await?;
-    let tva_rate = TvaRate::from(body.tva_rate);
+
+    // Agréger les montants TTC par taux depuis les line_items
+    let mut ttc_5_5: i64 = 0;
+    let mut ttc_10: i64 = 0;
+    let mut ttc_20: i64 = 0;
+    for item in &body.line_items {
+        match item.tva_rate {
+            TvaRateRequest::Reduit5_5 => ttc_5_5 += item.amount_ttc_cents,
+            TvaRateRequest::Intermediaire10 => ttc_10 += item.amount_ttc_cents,
+            TvaRateRequest::Normal20 => ttc_20 += item.amount_ttc_cents,
+        }
+    }
+    let total_ttc = ttc_5_5 + ttc_10 + ttc_20;
+
+    // Décomposition par taux
+    let tva_5_5_breakdown = TvaBreakdown::from_ttc(Cents(ttc_5_5), TvaRate::Reduit5_5);
+    let tva_10_breakdown  = TvaBreakdown::from_ttc(Cents(ttc_10), TvaRate::Intermediaire10);
+    let tva_20_breakdown  = TvaBreakdown::from_ttc(Cents(ttc_20), TvaRate::Normal20);
+
+    // Taux dominant (par montant TTC)
+    let dominant_rate = if ttc_20 >= ttc_10 && ttc_20 >= ttc_5_5 {
+        TvaRate::Normal20
+    } else if ttc_10 >= ttc_5_5 {
+        TvaRate::Intermediaire10
+    } else {
+        TvaRate::Reduit5_5
+    };
+
+    // Décomposition principale : taux dominant + totaux agrégés
+    let total_ht = tva_5_5_breakdown.ht_cents.0
+        + tva_10_breakdown.ht_cents.0
+        + tva_20_breakdown.ht_cents.0;
+    let total_tva = tva_5_5_breakdown.tva_cents.0
+        + tva_10_breakdown.tva_cents.0
+        + tva_20_breakdown.tva_cents.0;
+    let tva_breakdown = TvaBreakdown {
+        rate: dominant_rate,
+        ht_cents: Cents(total_ht),
+        tva_cents: Cents(total_tva),
+        ttc_cents: Cents(total_ttc),
+    };
 
     let data = FiscalEntryData {
         session_id,
         operation_type: OperationType::Sale,
-        amount_ttc_cents: Cents(body.amount_ttc_cents),
-        tva_breakdown: TvaBreakdown::from_ttc(Cents(body.amount_ttc_cents), tva_rate),
+        amount_ttc_cents: Cents(total_ttc),
+        tva_breakdown,
+        tva_5_5_breakdown,
+        tva_10_breakdown,
+        tva_20_breakdown,
         reason: None,
         order_reference: Some(body.order_reference.clone()),
     };
@@ -319,6 +393,12 @@ pub async fn pay_order_handler(
                 ht_cents: 0,
                 tva_cents: 0,
                 tva_rate: "10".to_string(),
+                tva_5_5_ht_cents: 0,
+                tva_5_5_tva_cents: 0,
+                tva_10_ht_cents: 0,
+                tva_10_tva_cents: 0,
+                tva_20_ht_cents: 0,
+                tva_20_tva_cents: 0,
                 hash_hex: "0".repeat(64),
                 created_at_ms: now_ms(),
             },
@@ -370,11 +450,61 @@ pub async fn cancel_order_handler(
         body.amount_ttc_cents
     };
 
+    // Breakdowns par taux — si fournis, on les utilise ; sinon mono-taux (fallback)
+    let (tva_5_5_breakdown, tva_10_breakdown, tva_20_breakdown, tva_breakdown) =
+        if body.tva_5_5_amount_ttc.is_some()
+            || body.tva_10_amount_ttc.is_some()
+            || body.tva_20_amount_ttc.is_some()
+        {
+            // Multi-taux : utiliser les montants fournis (négatifs)
+            let neg_5_5 = -body.tva_5_5_amount_ttc.unwrap_or(0);
+            let neg_10  = -body.tva_10_amount_ttc.unwrap_or(0);
+            let neg_20  = -body.tva_20_amount_ttc.unwrap_or(0);
+            let bd_5_5 = TvaBreakdown::from_ttc(Cents(neg_5_5), TvaRate::Reduit5_5);
+            let bd_10  = TvaBreakdown::from_ttc(Cents(neg_10),  TvaRate::Intermediaire10);
+            let bd_20  = TvaBreakdown::from_ttc(Cents(neg_20),  TvaRate::Normal20);
+            let dominant = if neg_20.abs() >= neg_10.abs() && neg_20.abs() >= neg_5_5.abs() {
+                TvaRate::Normal20
+            } else if neg_10.abs() >= neg_5_5.abs() {
+                TvaRate::Intermediaire10
+            } else {
+                TvaRate::Reduit5_5
+            };
+            let total_ht = bd_5_5.ht_cents.0 + bd_10.ht_cents.0 + bd_20.ht_cents.0;
+            let total_tva = bd_5_5.tva_cents.0 + bd_10.tva_cents.0 + bd_20.tva_cents.0;
+            let bd_main = TvaBreakdown {
+                rate: dominant,
+                ht_cents: Cents(total_ht),
+                tva_cents: Cents(total_tva),
+                ttc_cents: Cents(cancel_amount),
+            };
+            (bd_5_5, bd_10, bd_20, bd_main)
+        } else {
+            // Fallback mono-taux
+            let bd = TvaBreakdown::from_ttc(Cents(cancel_amount), tva_rate);
+            let bd_5_5 = match tva_rate {
+                TvaRate::Reduit5_5 => bd,
+                _ => TvaBreakdown::zero(TvaRate::Reduit5_5),
+            };
+            let bd_10 = match tva_rate {
+                TvaRate::Intermediaire10 => bd,
+                _ => TvaBreakdown::zero(TvaRate::Intermediaire10),
+            };
+            let bd_20 = match tva_rate {
+                TvaRate::Normal20 => bd,
+                _ => TvaBreakdown::zero(TvaRate::Normal20),
+            };
+            (bd_5_5, bd_10, bd_20, bd)
+        };
+
     let data = FiscalEntryData {
         session_id,
         operation_type: OperationType::Cancel,
         amount_ttc_cents: Cents(cancel_amount),
-        tva_breakdown: TvaBreakdown::from_ttc(Cents(cancel_amount), tva_rate),
+        tva_breakdown,
+        tva_5_5_breakdown,
+        tva_10_breakdown,
+        tva_20_breakdown,
         reason: Some(body.reason),
         order_reference: Some(body.fiscal_entry_id),
     };

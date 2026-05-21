@@ -492,6 +492,12 @@ mod tests {
             .execute(&pool).await.expect("Migration 0001");
         sqlx::query(include_str!("../../migrations/0002_z_reports_archives.sql"))
             .execute(&pool).await.expect("Migration 0002");
+        sqlx::query(include_str!("../../migrations/0003_sessions_sync.sql"))
+            .execute(&pool).await.expect("Migration 0003");
+        sqlx::query(include_str!("../../migrations/0004_z_reports_sync.sql"))
+            .execute(&pool).await.expect("Migration 0004");
+        sqlx::query(include_str!("../../migrations/0005_multi_tva.sql"))
+            .execute(&pool).await.expect("Migration 0005");
         pool
     }
 
@@ -516,6 +522,12 @@ mod tests {
                     Cents((i * 100) as i64),
                     TvaRate::Intermediaire10,
                 ),
+                tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+                tva_10_breakdown: TvaBreakdown::from_ttc(
+                    Cents((i * 100) as i64),
+                    TvaRate::Intermediaire10,
+                ),
+                tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
                 reason: None,
                 order_reference: Some(format!("ORD-{i:04}")),
             }).await.expect("Vente");

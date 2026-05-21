@@ -233,25 +233,19 @@ fn aggregate_entries(entries: &[FiscalEntry]) -> AggregatedTotals {
             OperationType::Sale => {
                 total_sales = total_sales + entry.amount_ttc_cents;
 
-                // Accumulation TVA pour les ventes uniquement
-                // (les remboursements inverseront les montants séparément)
-                match entry.tva_breakdown.rate {
-                    TvaRate::Reduit5_5 => {
-                        ht_5_5 = ht_5_5 + entry.tva_breakdown.ht_cents;
-                        tva_5_5 = tva_5_5 + entry.tva_breakdown.tva_cents;
-                        ttc_5_5 = ttc_5_5 + entry.tva_breakdown.ttc_cents;
-                    }
-                    TvaRate::Intermediaire10 => {
-                        ht_10 = ht_10 + entry.tva_breakdown.ht_cents;
-                        tva_10 = tva_10 + entry.tva_breakdown.tva_cents;
-                        ttc_10 = ttc_10 + entry.tva_breakdown.ttc_cents;
-                    }
-                    TvaRate::Normal20 => {
-                        ht_20 = ht_20 + entry.tva_breakdown.ht_cents;
-                        tva_20 = tva_20 + entry.tva_breakdown.tva_cents;
-                        ttc_20 = ttc_20 + entry.tva_breakdown.ttc_cents;
-                    }
-                }
+                // Accumulation TVA par taux — utilise les breakdowns per-rate (NF525 §4.3.1)
+                // Permet la ventilation correcte des entrées multi-taux
+                ht_5_5 = ht_5_5 + entry.tva_5_5_breakdown.ht_cents;
+                tva_5_5 = tva_5_5 + entry.tva_5_5_breakdown.tva_cents;
+                ttc_5_5 = ttc_5_5 + entry.tva_5_5_breakdown.ttc_cents;
+
+                ht_10 = ht_10 + entry.tva_10_breakdown.ht_cents;
+                tva_10 = tva_10 + entry.tva_10_breakdown.tva_cents;
+                ttc_10 = ttc_10 + entry.tva_10_breakdown.ttc_cents;
+
+                ht_20 = ht_20 + entry.tva_20_breakdown.ht_cents;
+                tva_20 = tva_20 + entry.tva_20_breakdown.tva_cents;
+                ttc_20 = ttc_20 + entry.tva_20_breakdown.ttc_cents;
             }
             OperationType::Refund => {
                 // Montant négatif → valeur absolue pour le total
@@ -558,6 +552,8 @@ mod tests {
             .execute(&pool).await.expect("Migration 0003");
         sqlx::query(include_str!("../../migrations/0004_z_reports_sync.sql"))
             .execute(&pool).await.expect("Migration 0004");
+        sqlx::query(include_str!("../../migrations/0005_multi_tva.sql"))
+            .execute(&pool).await.expect("Migration 0005");
 
         pool
     }
@@ -575,6 +571,9 @@ mod tests {
             operation_type: OperationType::Sale,
             amount_ttc_cents: Cents(amount),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: Some("ORD-TEST".to_string()),
         }
@@ -586,6 +585,9 @@ mod tests {
             operation_type: OperationType::Refund,
             amount_ttc_cents: Cents(amount),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(amount), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: Some("Erreur commande".to_string()),
             order_reference: None,
         }
@@ -654,6 +656,9 @@ mod tests {
             operation_type: OperationType::Sale,
             amount_ttc_cents: Cents(1100),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: None,
         }).await.expect("Vente 10%");
@@ -664,6 +669,9 @@ mod tests {
             operation_type: OperationType::Sale,
             amount_ttc_cents: Cents(1055),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(1055), TvaRate::Reduit5_5),
+            tva_5_5_breakdown: TvaBreakdown::from_ttc(Cents(1055), TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::zero(TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: None,
         }).await.expect("Vente 5.5%");

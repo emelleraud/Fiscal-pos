@@ -40,6 +40,9 @@ use super::{operation::OperationType, tva::TvaBreakdown};
 ///     operation_type: OperationType::Sale,
 ///     amount_ttc_cents: Cents(1100),
 ///     tva_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+///     tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+///     tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+///     tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
 ///     reason: None,
 ///     order_reference: Some("ORD-001".to_string()),
 /// };
@@ -67,7 +70,15 @@ pub struct FiscalEntry {
     pub amount_ttc_cents: Cents,
 
     /// Décomposition TVA : HT, TVA, TTC par taux applicable.
+    /// Pour les entrées multi-taux, ce champ contient le taux dominant et la somme totale.
     pub tva_breakdown: TvaBreakdown,
+
+    /// Décomposition TVA au taux réduit 5,5% (NF525 §4.3.1).
+    pub tva_5_5_breakdown: TvaBreakdown,
+    /// Décomposition TVA au taux intermédiaire 10% (NF525 §4.3.1).
+    pub tva_10_breakdown: TvaBreakdown,
+    /// Décomposition TVA au taux normal 20% (NF525 §4.3.1).
+    pub tva_20_breakdown: TvaBreakdown,
 
     // --- Contexte métier (optionnel) ---
     /// Motif obligatoire pour `Refund` et `Cancel`.
@@ -113,8 +124,14 @@ pub struct FiscalEntryData {
     pub operation_type: OperationType,
     /// Montant TTC en centimes.
     pub amount_ttc_cents: Cents,
-    /// Décomposition TVA.
+    /// Décomposition TVA principale (taux dominant pour le hash).
     pub tva_breakdown: TvaBreakdown,
+    /// Décomposition TVA au taux réduit 5,5% (NF525 §4.3.1).
+    pub tva_5_5_breakdown: TvaBreakdown,
+    /// Décomposition TVA au taux intermédiaire 10% (NF525 §4.3.1).
+    pub tva_10_breakdown: TvaBreakdown,
+    /// Décomposition TVA au taux normal 20% (NF525 §4.3.1).
+    pub tva_20_breakdown: TvaBreakdown,
     /// Motif (obligatoire pour `Refund` et `Cancel`).
     pub reason: Option<String>,
     /// Référence de commande.
@@ -144,6 +161,9 @@ impl FiscalEntryData {
     ///     operation_type: OperationType::Sale,
     ///     amount_ttc_cents: Cents(1100),
     ///     tva_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+    ///     tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+    ///     tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+    ///     tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
     ///     reason: None,
     ///     order_reference: None,
     /// };
@@ -185,7 +205,20 @@ impl FiscalEntryData {
             ));
         }
 
-        // 4. Motif obligatoire pour Refund et Cancel
+        // 4. Vérification que la somme des TTC par taux = montant TTC total
+        if self.operation_type != OperationType::ZClose {
+            let per_rate_total = self.tva_5_5_breakdown.ttc_cents
+                + self.tva_10_breakdown.ttc_cents
+                + self.tva_20_breakdown.ttc_cents;
+            if per_rate_total != self.amount_ttc_cents {
+                return Err(format!(
+                    "Somme des TTC par taux ({}) ≠ montant TTC total ({})",
+                    per_rate_total.0, self.amount_ttc_cents.0
+                ));
+            }
+        }
+
+        // 5. Motif obligatoire pour Refund et Cancel
         if self.operation_type.requires_reason() && self.reason.is_none() {
             return Err(format!(
                 "Motif obligatoire pour l'opération {}",
@@ -212,6 +245,9 @@ mod tests {
             operation_type: OperationType::Sale,
             amount_ttc_cents: Cents(1100),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: Some("ORD-001".to_string()),
         }
@@ -231,6 +267,9 @@ mod tests {
             operation_type: OperationType::Refund,
             amount_ttc_cents: Cents(-1100),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(-1100), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(-1100), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: Some("Produit défectueux".to_string()),
             order_reference: Some("ORD-001".to_string()),
         };
@@ -245,6 +284,9 @@ mod tests {
             operation_type: OperationType::ZClose,
             amount_ttc_cents: Cents(0),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(0), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::zero(TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: None,
         };
@@ -261,6 +303,9 @@ mod tests {
             operation_type: OperationType::Sale,
             amount_ttc_cents: Cents(1),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(1), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: None,
         };
@@ -292,6 +337,9 @@ mod tests {
             operation_type: OperationType::Refund,
             amount_ttc_cents: Cents(-1100),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(-1100), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(-1100), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None, // manquant !
             order_reference: None,
         };
@@ -307,6 +355,9 @@ mod tests {
             operation_type: OperationType::Cancel,
             amount_ttc_cents: Cents(-500),
             tva_breakdown: TvaBreakdown::from_ttc(Cents(-500), TvaRate::Intermediaire10),
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(-500), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: None,
         };
@@ -324,6 +375,9 @@ mod tests {
             operation_type: OperationType::Sale,
             amount_ttc_cents: Cents(1100),
             tva_breakdown: breakdown,
+            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
             reason: None,
             order_reference: None,
         };

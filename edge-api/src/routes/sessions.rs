@@ -89,6 +89,18 @@ pub struct ZReportSummary {
     pub last_sequence: u64,
     /// Nombre d'entrées dans la session.
     pub entry_count: u64,
+    /// Ventilation TVA 5,5% — HT en centimes.
+    pub tva_5_5_ht_cents: i64,
+    /// Ventilation TVA 5,5% — TVA en centimes.
+    pub tva_5_5_tva_cents: i64,
+    /// Ventilation TVA 10% — HT en centimes.
+    pub tva_10_ht_cents: i64,
+    /// Ventilation TVA 10% — TVA en centimes.
+    pub tva_10_tva_cents: i64,
+    /// Ventilation TVA 20% — HT en centimes.
+    pub tva_20_ht_cents: i64,
+    /// Ventilation TVA 20% — TVA en centimes.
+    pub tva_20_tva_cents: i64,
 }
 
 // ---------------------------------------------------------------------------
@@ -225,5 +237,11 @@ fn z_report_to_summary(r: &ZReport) -> ZReportSummary {
         first_sequence: r.first_entry_sequence,
         last_sequence: r.last_entry_sequence,
         entry_count: r.entry_count,
+        tva_5_5_ht_cents: r.tva_5_5_breakdown.ht_cents.0,
+        tva_5_5_tva_cents: r.tva_5_5_breakdown.tva_cents.0,
+        tva_10_ht_cents: r.tva_10_breakdown.ht_cents.0,
+        tva_10_tva_cents: r.tva_10_breakdown.tva_cents.0,
+        tva_20_ht_cents: r.tva_20_breakdown.ht_cents.0,
+        tva_20_tva_cents: r.tva_20_breakdown.tva_cents.0,
     }
 }

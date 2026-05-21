@@ -62,6 +62,12 @@ export interface FiscalEntryResponse {
   ht_cents: number;
   tva_cents: number;
   tva_rate: string;
+  tva_5_5_ht_cents: number;
+  tva_5_5_tva_cents: number;
+  tva_10_ht_cents: number;
+  tva_10_tva_cents: number;
+  tva_20_ht_cents: number;
+  tva_20_tva_cents: number;
   hash_hex: string;
   created_at_ms: number;
 }
@@ -85,6 +91,12 @@ export interface ZReportSummary {
   first_sequence: number;
   last_sequence: number;
   entry_count: number;
+  tva_5_5_ht_cents: number;
+  tva_5_5_tva_cents: number;
+  tva_10_ht_cents: number;
+  tva_10_tva_cents: number;
+  tva_20_ht_cents: number;
+  tva_20_tva_cents: number;
 }
 
 export interface CloseSessionResponse {
@@ -190,10 +202,14 @@ export const closeSession = (): Promise<CloseSessionResponse> =>
 // API Commandes
 // ---------------------------------------------------------------------------
 
-export interface CreateOrderPayload {
-  order_reference: string;
+export interface LineItem {
   amount_ttc_cents: number;
   tva_rate: TvaRate;
+}
+
+export interface CreateOrderPayload {
+  order_reference: string;
+  line_items: LineItem[];
   payment_method: PaymentMethod;
 }
 
@@ -219,6 +235,9 @@ export interface CancelOrderPayload {
   fiscal_entry_id: string;
   amount_ttc_cents: number;
   tva_rate: TvaRate;
+  tva_5_5_amount_ttc?: number;
+  tva_10_amount_ttc?: number;
+  tva_20_amount_ttc?: number;
 }
 
 export const cancelOrder = (orderId: string, payload: CancelOrderPayload): Promise<OrderResponse> =>
