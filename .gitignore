@@ -33,3 +33,4 @@ out/
 
 # Electron
 release/
+pos-app/electron/*.js

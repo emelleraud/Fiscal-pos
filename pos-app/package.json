@@ -10,8 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "tsc && vite build && electron-builder",
+    "electron:dev": "tsc -p tsconfig.electron.json && concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "tsc -p tsconfig.electron.json && vite build && electron-builder",
     "lint": "eslint src --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit"
   },
