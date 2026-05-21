@@ -21,6 +21,7 @@
 //! L'authentification manager (PIN ou badge) est validée côté `pos-app` —
 //! l'API elle-même ne distingue pas les niveaux pour le MVP.
 
+pub mod archive;
 pub mod health;
 pub mod menu;
 pub mod orders;
@@ -47,5 +48,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/orders/:id",           get(orders::get_order_handler))
         .route("/api/v1/orders/:id/pay",       post(orders::pay_order_handler))
         .route("/api/v1/orders/:id/cancel",    post(orders::cancel_order_handler))
+        // --- Archive annuelle NF525 §7 ---
+        .route("/api/v1/archive/:year",        post(archive::generate_archive_handler))
         .with_state(state)
 }

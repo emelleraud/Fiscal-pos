@@ -404,6 +404,7 @@ dependencies = [
  "anyhow",
  "axum",
  "common",
+ "ed25519-dalek",
  "fiscal-engine",
  "hyper",
  "serde",

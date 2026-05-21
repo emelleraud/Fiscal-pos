@@ -13,7 +13,7 @@ use tempfile::NamedTempFile;
 use tower::ServiceExt;
 
 use edge_api::app::{build_app, AppState};
-use fiscal_engine::journal::Journal;
+use fiscal_engine::{archive_engine::generate_signing_keypair, hex_encode, journal::Journal};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -463,4 +463,99 @@ async fn session_accumulators_reflect_orders() {
     let body = body_json(resp).await;
     assert_eq!(body["totals"]["sales_cents"], 1650);
     assert_eq!(body["totals"]["entry_count"], 2);
+}
+
+// ---------------------------------------------------------------------------
+// Archive annuelle NF525 §7
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn archive_no_signing_key_returns_500() {
+    let (app, _db) = setup().await;
+    // Sans FISCAL_SIGNING_KEY_HEX, la route doit retourner une erreur serveur
+    std::env::remove_var("FISCAL_SIGNING_KEY_HEX");
+
+    let resp = app
+        .oneshot(empty_request(Method::POST, "/api/v1/archive/2024"))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[tokio::test]
+async fn archive_no_data_returns_404() {
+    let (app, _db) = setup().await;
+    let (priv_bytes, _) = generate_signing_keypair();
+    std::env::set_var("FISCAL_SIGNING_KEY_HEX", hex_encode(&priv_bytes));
+
+    let resp = app
+        .oneshot(empty_request(Method::POST, "/api/v1/archive/1999"))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn archive_generates_and_returns_409_on_duplicate() {
+    let (app, _db) = setup().await;
+    let (priv_bytes, _) = generate_signing_keypair();
+    std::env::set_var("FISCAL_SIGNING_KEY_HEX", hex_encode(&priv_bytes));
+
+    // Ouvrir une session, faire une vente, clôturer
+    app.clone()
+        .oneshot(empty_request(Method::POST, "/api/v1/sessions/open"))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/orders",
+            json!({
+                "order_reference": "ORD-ARCH-001",
+                "line_items": [{ "amount_ttc_cents": 1100, "tva_rate": "10" }],
+                "payment_method": "card"
+            }),
+        ))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(empty_request(Method::POST, "/api/v1/sessions/close"))
+        .await
+        .unwrap();
+
+    // Première génération → 201
+    let year = current_year();
+    let resp1 = app
+        .clone()
+        .oneshot(empty_request(
+            Method::POST,
+            &format!("/api/v1/archive/{year}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp1.status(), StatusCode::CREATED);
+    let body = body_json(resp1).await;
+    assert!(body["csv_hash_hex"].is_string());
+    assert!(body["signature_hex"].is_string());
+    assert_eq!(body["year"], year as i64);
+
+    // Deuxième tentative → 409
+    let resp2 = app
+        .oneshot(empty_request(
+            Method::POST,
+            &format!("/api/v1/archive/{year}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp2.status(), StatusCode::CONFLICT);
+}
+
+fn current_year() -> u32 {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    1970 + (secs / (365 * 24 * 3600 + 20952)) as u32
 }
