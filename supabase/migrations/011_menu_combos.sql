@@ -1,8 +1,11 @@
 -- supabase/migrations/011_menu_combos.sql
 -- Combos/menus composés : en-tête + items fixes + slots configurables + options de slots.
 -- Réseau-wide (pas de site_id) — même pattern que migration 010.
+-- Pas de tva_rate sur menu_combos : TVA portée par chaque composant (produit/variante).
+-- Le moteur NF525 ventile les taux au moment de la vente — le combo est toujours éclaté
+-- en lignes individuelles dans fiscal_entries.
 
-CREATE TABLE public.menu_combos (
+CREATE TABLE IF NOT EXISTS public.menu_combos (
   id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   category_id      uuid        REFERENCES public.menu_categories(id) ON DELETE SET NULL,
   sku              text        UNIQUE,
@@ -19,7 +22,7 @@ CREATE TABLE public.menu_combos (
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE public.menu_combo_fixed_items (
+CREATE TABLE IF NOT EXISTS public.menu_combo_fixed_items (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   combo_id      uuid NOT NULL REFERENCES public.menu_combos(id) ON DELETE CASCADE,
   product_id    uuid REFERENCES public.menu_products(id) ON DELETE RESTRICT,
@@ -30,7 +33,7 @@ CREATE TABLE public.menu_combo_fixed_items (
     CHECK (product_id IS NOT NULL OR variant_id IS NOT NULL)
 );
 
-CREATE TABLE public.menu_combo_slots (
+CREATE TABLE IF NOT EXISTS public.menu_combo_slots (
   id            uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
   combo_id      uuid    NOT NULL REFERENCES public.menu_combos(id) ON DELETE CASCADE,
   name          text    NOT NULL,
@@ -40,7 +43,7 @@ CREATE TABLE public.menu_combo_slots (
   is_required   boolean NOT NULL DEFAULT true
 );
 
-CREATE TABLE public.menu_combo_slot_options (
+CREATE TABLE IF NOT EXISTS public.menu_combo_slot_options (
   id                uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
   slot_id           uuid    NOT NULL REFERENCES public.menu_combo_slots(id) ON DELETE CASCADE,
   product_id        uuid    REFERENCES public.menu_products(id) ON DELETE RESTRICT,
@@ -52,16 +55,20 @@ CREATE TABLE public.menu_combo_slot_options (
     CHECK (product_id IS NOT NULL OR variant_id IS NOT NULL)
 );
 
-CREATE INDEX idx_menu_combos_category      ON public.menu_combos(category_id);
-CREATE INDEX idx_menu_combos_sku           ON public.menu_combos(sku) WHERE sku IS NOT NULL;
-CREATE INDEX idx_combo_fixed_items_combo   ON public.menu_combo_fixed_items(combo_id);
-CREATE INDEX idx_combo_fixed_product       ON public.menu_combo_fixed_items(product_id) WHERE product_id IS NOT NULL;
-CREATE INDEX idx_combo_fixed_variant       ON public.menu_combo_fixed_items(variant_id) WHERE variant_id IS NOT NULL;
-CREATE INDEX idx_combo_slots_combo         ON public.menu_combo_slots(combo_id);
-CREATE INDEX idx_combo_slot_options_slot   ON public.menu_combo_slot_options(slot_id);
-CREATE INDEX idx_combo_option_product      ON public.menu_combo_slot_options(product_id) WHERE product_id IS NOT NULL;
-CREATE INDEX idx_combo_option_variant      ON public.menu_combo_slot_options(variant_id) WHERE variant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_menu_combos_category      ON public.menu_combos(category_id);
+CREATE INDEX IF NOT EXISTS idx_menu_combos_sku           ON public.menu_combos(sku) WHERE sku IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_combo_fixed_items_combo   ON public.menu_combo_fixed_items(combo_id);
+CREATE INDEX IF NOT EXISTS idx_combo_fixed_product       ON public.menu_combo_fixed_items(product_id) WHERE product_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_combo_fixed_variant       ON public.menu_combo_fixed_items(variant_id) WHERE variant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_combo_slots_combo         ON public.menu_combo_slots(combo_id);
+CREATE INDEX IF NOT EXISTS idx_combo_slot_options_slot   ON public.menu_combo_slot_options(slot_id);
+CREATE INDEX IF NOT EXISTS idx_combo_option_product      ON public.menu_combo_slot_options(product_id) WHERE product_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_combo_option_variant      ON public.menu_combo_slot_options(variant_id) WHERE variant_id IS NOT NULL;
 
+-- Trigger updated_at sur la table en-tête uniquement.
+-- Les tables enfants (fixed_items, slots, slot_options) n'ont pas de colonne updated_at
+-- car elles sont toujours remplacées en totalité (delete-all + reinsert) lors de chaque
+-- sauvegarde du combo — tracker les modifications individuelles n'a pas de valeur.
 CREATE TRIGGER menu_combos_updated_at
   BEFORE UPDATE ON public.menu_combos
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
