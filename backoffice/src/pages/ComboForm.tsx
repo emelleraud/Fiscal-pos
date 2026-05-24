@@ -46,7 +46,7 @@ interface SlotDraft {
 }
 
 interface CatalogProduct { id: string; name: string }
-interface CatalogVariant { id: string; name: string; product_id: string; menu_products: { name: string } }
+interface CatalogVariant { id: string; name: string; menu_products: { name: string } }
 interface Category { id: string; parent_id: string | null; name: string }
 
 // ---- Constants ----
@@ -115,7 +115,7 @@ export default function ComboForm() {
       .then(({ data }) => setCats(data ?? []))
     supabase.from('menu_products').select('id,name').eq('is_active', true).order('name')
       .then(({ data }) => setProds(data ?? []))
-    supabase.from('menu_variants').select('id,name,product_id,menu_products(name)').order('name')
+    supabase.from('menu_variants').select('id,name,menu_products(name)').eq('is_active', true).order('name')
       .then(({ data }) => setVars((data ?? []) as unknown as CatalogVariant[]))
   }, [])
 
@@ -168,6 +168,9 @@ export default function ComboForm() {
             display_order: o.display_order as number,
           })),
       })))
+      setLoading(false)
+    }).catch(err => {
+      setError(String(err))
       setLoading(false)
     })
   }, [id, isNew])
@@ -234,6 +237,10 @@ export default function ComboForm() {
     }
     for (const s of slots) {
       if (!s.name.trim()) { setError('Chaque slot doit avoir un nom'); return }
+      if (s.min_select > s.max_select) {
+        setError(`Slot "${s.name}" : le minimum (${s.min_select}) ne peut pas dépasser le maximum (${s.max_select})`)
+        return
+      }
       if (s.options.length === 0) { setError(`Le slot "${s.name}" doit avoir au moins 1 option`); return }
       for (const o of s.options) {
         if (!o.target) { setError(`Slot "${s.name}" : chaque option doit avoir un produit ou variante sélectionné`); return }
@@ -269,7 +276,8 @@ export default function ComboForm() {
     }
 
     // Delete-all + reinsert fixed items
-    await supabase.from('menu_combo_fixed_items').delete().eq('combo_id', comboId!)
+    const { error: delFixed } = await supabase.from('menu_combo_fixed_items').delete().eq('combo_id', comboId!)
+    if (delFixed) { setError(delFixed.message); setSaving(false); return }
     if (fixedItems.length > 0) {
       const { error } = await supabase.from('menu_combo_fixed_items').insert(
         fixedItems.map((f, i) => ({
@@ -283,7 +291,8 @@ export default function ComboForm() {
     }
 
     // Delete-all slots (CASCADE removes options), then reinsert sequentially to get IDs
-    await supabase.from('menu_combo_slots').delete().eq('combo_id', comboId!)
+    const { error: delSlots } = await supabase.from('menu_combo_slots').delete().eq('combo_id', comboId!)
+    if (delSlots) { setError(delSlots.message); setSaving(false); return }
     for (const [si, slot] of slots.entries()) {
       const { data: slotRow, error: slotErr } = await supabase
         .from('menu_combo_slots')
