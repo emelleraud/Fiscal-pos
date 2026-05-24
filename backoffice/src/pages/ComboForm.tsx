@@ -228,6 +228,15 @@ export default function ComboForm() {
     ))
   }
 
+  // ---- Delete ----
+
+  async function handleDelete() {
+    if (!confirm(`Supprimer le combo « ${combo.name} » ?`)) return
+    const { error } = await supabase.from('menu_combos').delete().eq('id', id!)
+    if (error) { setError(error.message); return }
+    navigate('/combos')
+  }
+
   // ---- Save ----
 
   async function handleSave() {
@@ -340,6 +349,12 @@ export default function ComboForm() {
         <h1 style={{ margin: 0, fontSize: '1.25rem', flex: 1 }}>
           {isNew ? 'Nouveau combo' : combo.name}
         </h1>
+        {!isNew && (
+          <button onClick={handleDelete}
+            style={{ padding: '0.5rem 1rem', borderRadius: 6, border: '1px solid #ffc9c9', background: '#fff', color: '#c0392b', fontSize: '0.875rem', cursor: 'pointer' }}>
+            Supprimer
+          </button>
+        )}
         <button onClick={handleSave} disabled={saving}
           style={{ padding: '0.5rem 1.25rem', borderRadius: 6, border: 'none', background: '#4f8ef7', color: '#fff', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Enregistrement…' : 'Enregistrer'}
