@@ -1,4 +1,3 @@
-// backoffice/src/pages/ComboList.tsx
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
@@ -23,8 +22,8 @@ export default function ComboList() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [search, setSearch]   = useState('')
-  const [catFilter, setCat]   = useState('')
-  const [categories, setCats] = useState<{ id: string; name: string }[]>([])
+  const [catFilter, setCat]        = useState('')
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
 
   async function load() {
     setLoading(true)
@@ -37,7 +36,7 @@ export default function ComboList() {
     ])
     if (error) setError(error.message)
     else setCombos((data ?? []) as unknown as Combo[])
-    setCats(cats ?? [])
+    setCategories(cats ?? [])
     setLoading(false)
   }
 

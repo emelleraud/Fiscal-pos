@@ -50,7 +50,7 @@ export default function Layout() {
           </select>
         )}
 
-        {navItems.map((item, i) =>
+        {navItems.map((item) =>
           'divider' in item ? (
             <div key={item.label} style={{ marginTop: '0.75rem', marginBottom: '0.25rem' }}>
               <div style={{ borderTop: '1px solid #2a2a4a', marginBottom: '0.5rem' }} />
