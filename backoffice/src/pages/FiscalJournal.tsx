@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { useSite } from '../context/SiteContext'
 
 interface FiscalEntry {
   id: string
@@ -29,16 +30,23 @@ const OP_COLORS: Record<string, string> = {
 }
 
 export default function FiscalJournal() {
+  const { activeSiteId } = useSite()
   const [rows, setRows]       = useState<FiscalEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [page, setPage]       = useState(0)
 
   useEffect(() => {
+    setPage(0)
+  }, [activeSiteId])
+
+  useEffect(() => {
+    if (!activeSiteId) return
     setLoading(true)
     supabase
       .from('fiscal_entries_enriched')
       .select('id,sequence,operation_type,amount,tva_rate,signed_at,site_code,site_name,session_ref,entry_hash,order_ref')
+      .eq('site_id', activeSiteId)
       .order('sequence', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
       .then(({ data, error }) => {
@@ -46,7 +54,7 @@ export default function FiscalJournal() {
         else setRows(data ?? [])
         setLoading(false)
       })
-  }, [page])
+  }, [activeSiteId, page])
 
   if (error) return <p style={{ color: '#e53e3e' }}>Erreur : {error}</p>
 
@@ -75,7 +83,7 @@ export default function FiscalJournal() {
                 <span style={{
                   padding: '2px 7px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600,
                   background: `${OP_COLORS[r.operation_type] ?? '#555'}22`,
-                  color: OP_COLORS[r.operation_type] ?? '#555'
+                  color: OP_COLORS[r.operation_type] ?? '#555',
                 }}>
                   {r.operation_type}
                 </span>

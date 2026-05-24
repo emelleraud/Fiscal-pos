@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { useSite } from '../context/SiteContext'
 
 interface ZReport {
   id: string
@@ -19,15 +20,20 @@ const EUR = (cents: number) =>
   (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 
 export default function ZReports() {
-  const [rows, setRows]       = useState<ZReport[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const { activeSiteId } = useSite()
+  const [rows, setRows]         = useState<ZReport[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!activeSiteId) return
+    setLoading(true)
+    setError(null)
     supabase
       .from('z_reports')
       .select('id,report_number,generated_at,total_sales,total_refunds,net_revenue,entry_count,tva_5_5_amount,tva_10_amount,tva_20_amount,report_hash')
+      .eq('site_id', activeSiteId)
       .order('report_number', { ascending: false })
       .limit(100)
       .then(({ data, error }) => {
@@ -35,7 +41,7 @@ export default function ZReports() {
         else setRows(data ?? [])
         setLoading(false)
       })
-  }, [])
+  }, [activeSiteId])
 
   if (loading) return <p style={{ color: '#888' }}>Chargement…</p>
   if (error)   return <p style={{ color: '#e53e3e' }}>Erreur : {error}</p>
@@ -53,7 +59,6 @@ export default function ZReports() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {rows.map(r => (
             <div key={r.id} style={{ background: '#fff', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-              {/* Ligne principale — cliquable */}
               <div
                 onClick={() => setExpanded(expanded === r.id ? null : r.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '0.85rem 1.25rem', cursor: 'pointer', userSelect: 'none' }}
@@ -69,15 +74,14 @@ export default function ZReports() {
                 <span style={{ color: '#aaa', fontSize: '0.75rem' }}>{expanded === r.id ? '▲' : '▼'}</span>
               </div>
 
-              {/* Détail dépliable */}
               {expanded === r.id && (
                 <div style={{ borderTop: '1px solid #f1f3f5', padding: '0.85rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem', background: '#fafbfc', fontSize: '0.82rem' }}>
                   {[
-                    { label: 'CA brut',     value: EUR(r.total_sales) },
-                    { label: 'Remboursé',   value: EUR(r.total_refunds), red: true },
-                    { label: 'TVA 5,5 %',   value: EUR(r.tva_5_5_amount) },
-                    { label: 'TVA 10 %',    value: EUR(r.tva_10_amount) },
-                    { label: 'TVA 20 %',    value: EUR(r.tva_20_amount) },
+                    { label: 'CA brut',      value: EUR(r.total_sales) },
+                    { label: 'Remboursé',    value: EUR(r.total_refunds), red: true },
+                    { label: 'TVA 5,5 %',    value: EUR(r.tva_5_5_amount) },
+                    { label: 'TVA 10 %',     value: EUR(r.tva_10_amount) },
+                    { label: 'TVA 20 %',     value: EUR(r.tva_20_amount) },
                     { label: 'Hash rapport', value: r.report_hash ? r.report_hash.slice(0, 16) + '…' : '—', mono: true },
                   ].map(({ label, value, red, mono }) => (
                     <div key={label}>

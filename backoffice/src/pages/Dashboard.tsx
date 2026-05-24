@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { useSite } from '../context/SiteContext'
 
 interface DailyRevenue {
   site_id: string
@@ -17,14 +18,19 @@ const EUR = (cents: number) =>
   (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 
 export default function Dashboard() {
+  const { activeSiteId } = useSite()
   const [rows, setRows]       = useState<DailyRevenue[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
 
   useEffect(() => {
+    if (!activeSiteId) return
+    setLoading(true)
+    setError(null)
     supabase
       .from('daily_revenue_by_site')
       .select('*')
+      .eq('site_id', activeSiteId)
       .order('day', { ascending: false })
       .limit(90)
       .then(({ data, error }) => {
@@ -32,7 +38,7 @@ export default function Dashboard() {
         else setRows(data ?? [])
         setLoading(false)
       })
-  }, [])
+  }, [activeSiteId])
 
   const totalNet = rows.reduce((acc, r) => acc + (r.net_revenue ?? 0), 0)
 
