@@ -1,20 +1,47 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import { SiteProvider } from './context/SiteContext'
+import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
+import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import FiscalJournal from './pages/FiscalJournal'
 import ZReports from './pages/ZReports'
+import MenuManager from './pages/MenuManager'
+import CategoryManager from './pages/CategoryManager'
+import ModifierGroupManager from './pages/ModifierGroupManager'
+import ProductList from './pages/ProductList'
+import ProductForm from './pages/ProductForm'
+import ComboList from './pages/ComboList'
+import ComboForm from './pages/ComboForm'
 
 export default function App() {
   return (
     <BrowserRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard"      element={<Dashboard />} />
-          <Route path="/fiscal-journal" element={<FiscalJournal />} />
-          <Route path="/z-reports"      element={<ZReports />} />
-        </Routes>
-      </Layout>
+      <AuthProvider>
+        <SiteProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard"      element={<Dashboard />} />
+                <Route path="/fiscal-journal" element={<FiscalJournal />} />
+                <Route path="/z-reports"      element={<ZReports />} />
+                <Route path="/categories"     element={<CategoryManager />} />
+                <Route path="/products"       element={<ProductList />} />
+                <Route path="/products/new"   element={<ProductForm />} />
+                <Route path="/products/:id"   element={<ProductForm />} />
+                <Route path="/combos"         element={<ComboList />} />
+                <Route path="/combos/new"     element={<ComboForm />} />
+                <Route path="/combos/:id"     element={<ComboForm />} />
+                <Route path="/modifiers"      element={<ModifierGroupManager />} />
+                <Route path="/menu"           element={<MenuManager />} />
+              </Route>
+            </Route>
+          </Routes>
+        </SiteProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
