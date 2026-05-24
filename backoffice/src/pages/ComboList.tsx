@@ -83,8 +83,8 @@ export default function ComboList() {
 
       {error && <p style={{ color: '#e53e3e', marginBottom: '1rem' }}>{error}</p>}
 
-      <div style={{ background: '#fff', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+      <div style={{ background: '#fff', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflowX: 'auto' }}>
+        <table style={{ width: '100%', minWidth: 750, borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>
             <tr style={{ background: '#f1f3f5', textAlign: 'left' }}>
               {['Nom', 'SKU', 'Catégorie', 'Prix base', 'Slots', 'Items fixes', 'Statut', 'Actions'].map(h => (
