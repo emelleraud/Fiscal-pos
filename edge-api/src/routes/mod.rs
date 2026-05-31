@@ -25,6 +25,7 @@ pub mod archive;
 pub mod health;
 pub mod menu;
 pub mod orders;
+pub mod promotions;
 pub mod sessions;
 
 use axum::{routing::{get, post}, Router};
@@ -48,6 +49,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/orders/:id",           get(orders::get_order_handler))
         .route("/api/v1/orders/:id/pay",       post(orders::pay_order_handler))
         .route("/api/v1/orders/:id/cancel",    post(orders::cancel_order_handler))
+        // --- Promotions ---
+        .route("/api/v1/promotions/available", get(promotions::get_available_promotions))
         // --- Archive annuelle NF525 §7 ---
         .route("/api/v1/archive/:year",        post(archive::generate_archive_handler))
         .with_state(state)
