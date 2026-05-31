@@ -34,3 +34,8 @@ CREATE POLICY "director_write_members" ON public.restaurant_group_members
   FOR ALL TO authenticated
   USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('director','regional_director'))
   WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('director','regional_director'));
+
+CREATE INDEX IF NOT EXISTS idx_rgm_site_id ON public.restaurant_group_members(site_id);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.restaurant_groups TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.restaurant_group_members TO authenticated;

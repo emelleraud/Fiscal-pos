@@ -23,3 +23,5 @@ INSERT INTO public.promotion_approval_thresholds (scope, max_cents, required_rol
   ('site',  NULL, 'director'),
   ('group', NULL, 'director'),
   ('chain', NULL, 'regional_director');
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.promotion_approval_thresholds TO authenticated;
