@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "fiscal-engine",
+    "promo-engine",
     "edge-api",
     "sync-client",
     "common",
