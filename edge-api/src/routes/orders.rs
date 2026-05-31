@@ -43,6 +43,7 @@ use fiscal_engine::{
     },
     FiscalEntry,
 };
+use promo_engine::{Cart, CartItem, Promotion, PromoType, Trigger, TvaRateKey};
 
 // ---------------------------------------------------------------------------
 // DTOs de requête
@@ -51,6 +52,9 @@ use fiscal_engine::{
 /// Article de commande avec montant et taux de TVA.
 #[derive(Debug, Deserialize)]
 pub struct LineItem {
+    /// SKU de l'article (optionnel — utilisé pour les promos ciblées sur un article).
+    #[serde(default)]
+    pub sku: Option<String>,
     /// Montant TTC en centimes pour cet article (quantité incluse).
     pub amount_ttc_cents: i64,
     /// Taux de TVA applicable à cet article.
@@ -68,6 +72,9 @@ pub struct CreateOrderRequest {
     /// Stocké pour la traçabilité mais non utilisé dans la logique fiscale MVP.
     #[allow(dead_code)]
     pub payment_method: PaymentMethod,
+    /// Identifiants de promotions manuelles sélectionnées par le caissier.
+    #[serde(default)]
+    pub manual_promo_ids: Vec<String>,
 }
 
 /// Corps de la requête de validation de paiement.
@@ -139,6 +146,17 @@ pub enum PaymentMethod {
 // DTOs de réponse
 // ---------------------------------------------------------------------------
 
+/// Promotion appliquée lors d'une commande.
+#[derive(Debug, Serialize)]
+pub struct AppliedPromoResponse {
+    /// Identifiant de la promotion.
+    pub promo_id: String,
+    /// Nom de la promotion.
+    pub name: String,
+    /// Montant de la remise en centimes (positif).
+    pub discount_cents: i64,
+}
+
 /// Réponse après création / annulation d'une commande.
 #[derive(Debug, Serialize)]
 pub struct OrderResponse {
@@ -146,6 +164,8 @@ pub struct OrderResponse {
     pub order_id: String,
     /// Entrée fiscale créée.
     pub fiscal_entry: FiscalEntryResponse,
+    /// Promotions appliquées lors de cette commande.
+    pub applied_promos: Vec<AppliedPromoResponse>,
 }
 
 /// Réponse après validation du paiement (ticket de caisse).
@@ -220,6 +240,109 @@ impl From<&FiscalEntry> for FiscalEntryResponse {
             hash_hex: hex_encode(&e.hash),
             created_at_ms: e.created_at_ms,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers promo-engine
+// ---------------------------------------------------------------------------
+
+/// Ligne brute lue depuis la table SQLite `promotions`.
+struct SqlitePromoRow {
+    id: String,
+    name: String,
+    promo_type: String,
+    trigger_type: String,
+    value_cents: Option<i64>,
+    value_bps: Option<i64>,
+    target_sku: Option<String>,
+    exclusion_group: Option<String>,
+    priority: i64,
+    valid_from: Option<String>,
+    valid_to: Option<String>,
+    days_of_week: Option<String>,
+    time_from: Option<String>,
+    time_to: Option<String>,
+}
+
+impl TryFrom<SqlitePromoRow> for Promotion {
+    type Error = ();
+
+    fn try_from(r: SqlitePromoRow) -> Result<Self, Self::Error> {
+        let id: Uuid = r.id.parse().map_err(|_| ())?;
+
+        let promo_type = match r.promo_type.as_str() {
+            "fixed_amount" => PromoType::FixedAmount,
+            "percentage"   => PromoType::Percentage,
+            "item_discount"=> PromoType::ItemDiscount,
+            "bogo"         => PromoType::Bogo,
+            "happy_hour"   => PromoType::HappyHour,
+            _              => return Err(()),
+        };
+
+        let trigger = match r.trigger_type.as_str() {
+            "auto"   => Trigger::Auto,
+            "manual" => Trigger::Manual,
+            _        => return Err(()),
+        };
+
+        // Analyser une date "YYYY-MM-DD" sans le feature `parsing` du crate `time`
+        let parse_date = |s: &str| -> Option<time::Date> {
+            let parts: Vec<&str> = s.splitn(3, '-').collect();
+            if parts.len() < 3 { return None; }
+            let year: i32 = parts[0].parse().ok()?;
+            let month: u8 = parts[1].parse().ok()?;
+            let day: u8   = parts[2].parse().ok()?;
+            let month = time::Month::try_from(month).ok()?;
+            time::Date::from_calendar_date(year, month, day).ok()
+        };
+
+        let valid_from = r.valid_from.as_deref().and_then(parse_date);
+        let valid_to   = r.valid_to.as_deref().and_then(parse_date);
+
+        // days_of_week est stocké en JSON : "[1,2,5]" ou NULL
+        let days_of_week: Option<Vec<u8>> = r
+            .days_of_week
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<Vec<u8>>(s).ok());
+
+        // time_from / time_to : format "HH:MM"
+        let parse_time = |s: &str| -> Option<time::Time> {
+            let parts: Vec<&str> = s.splitn(2, ':').collect();
+            if parts.len() < 2 { return None; }
+            let h: u8 = parts[0].parse().ok()?;
+            let m: u8 = parts[1].parse().ok()?;
+            time::Time::from_hms(h, m, 0).ok()
+        };
+
+        let time_from = r.time_from.as_deref().and_then(parse_time);
+        let time_to   = r.time_to.as_deref().and_then(parse_time);
+
+        Ok(Promotion {
+            id,
+            name: r.name,
+            promo_type,
+            value_cents: r.value_cents,
+            value_bps: r.value_bps,
+            target_sku: r.target_sku,
+            trigger,
+            exclusion_group: r.exclusion_group,
+            priority: i32::try_from(r.priority).unwrap_or(0),
+            valid_from,
+            valid_to,
+            days_of_week,
+            time_from,
+            time_to,
+        })
+    }
+}
+
+/// Convertit un `TvaRateRequest` vers le type `TvaRateKey` du promo-engine.
+fn tva_rate_request_to_key(r: TvaRateRequest) -> TvaRateKey {
+    match r {
+        TvaRateRequest::Reduit5_5      => TvaRateKey::Reduit5_5,
+        TvaRateRequest::Intermediaire10=> TvaRateKey::Intermediaire10,
+        TvaRateRequest::Normal20       => TvaRateKey::Normal20,
     }
 }
 
@@ -312,14 +435,172 @@ pub async fn create_order_handler(
         order_reference: Some(body.order_reference.clone()),
     };
 
+    // -----------------------------------------------------------------------
+    // Évaluation des promotions
+    // -----------------------------------------------------------------------
+
+    // Charger toutes les promotions actives depuis SQLite
+    let raw_rows = sqlx::query(
+        "SELECT id, name, promo_type, trigger_type, value_cents, value_bps, target_sku,
+                exclusion_group, priority, valid_from, valid_to, days_of_week,
+                time_from, time_to
+         FROM promotions WHERE active = 1",
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        FiscalError::Database(e)
+    })?;
+
+    // Convertir en lignes structurées puis en types promo-engine
+    let promos: Vec<Promotion> = raw_rows
+        .into_iter()
+        .filter_map(|row| {
+            use sqlx::Row as _;
+            let r = SqlitePromoRow {
+                id: row.try_get("id").unwrap_or_default(),
+                name: row.try_get("name").unwrap_or_default(),
+                promo_type: row.try_get("promo_type").unwrap_or_default(),
+                trigger_type: row.try_get("trigger_type").unwrap_or_default(),
+                value_cents: row.try_get("value_cents").unwrap_or(None),
+                value_bps: row.try_get("value_bps").unwrap_or(None),
+                target_sku: row.try_get("target_sku").unwrap_or(None),
+                exclusion_group: row.try_get("exclusion_group").unwrap_or(None),
+                priority: row.try_get("priority").unwrap_or(0),
+                valid_from: row.try_get("valid_from").unwrap_or(None),
+                valid_to: row.try_get("valid_to").unwrap_or(None),
+                days_of_week: row.try_get("days_of_week").unwrap_or(None),
+                time_from: row.try_get("time_from").unwrap_or(None),
+                time_to: row.try_get("time_to").unwrap_or(None),
+            };
+            Promotion::try_from(r).ok()
+        })
+        .collect();
+
+    // Construire le panier pour le promo-engine
+    let cart = Cart {
+        line_items: body.line_items.iter().map(|li| CartItem {
+            sku: li.sku.clone().unwrap_or_default(),
+            amount_ttc_cents: li.amount_ttc_cents,
+            tva_rate: tva_rate_request_to_key(li.tva_rate),
+        }).collect(),
+        total_ttc_cents: total_ttc,
+    };
+
+    // Parser les IDs manuels fournis par le frontend
+    let manual_ids: Vec<Uuid> = body.manual_promo_ids
+        .iter()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    // Évaluer les promotions applicables
+    let eval = promo_engine::evaluate(&cart, &promos, &manual_ids, time::OffsetDateTime::now_utc());
+
+    // -----------------------------------------------------------------------
+    // Pré-construction et pré-validation de toutes les entrées DISCOUNT
+    // AVANT d'enregistrer la VENTE — garantit la cohérence du journal.
+    // (NF525 : si une remise est invalide, la vente ne doit pas être commitée)
+    // -----------------------------------------------------------------------
+    struct DiscountEntry {
+        data: FiscalEntryData,
+        promo_id: String,
+        promo_name: String,
+        discount_cents: i64,
+    }
+
+    let mut pending_discounts: Vec<DiscountEntry> = Vec::new();
+
+    for app in &eval.applied {
+        if app.discount_cents <= 0 {
+            continue;
+        }
+
+        // Décomposition TVA de la remise par taux (proportionnelle au panier)
+        let disc_5_5 = -app.tva_allocation.cents_5_5;
+        let disc_10  = -app.tva_allocation.cents_10;
+        let disc_20  = -app.tva_allocation.cents_20;
+
+        let disc_bd_5_5 = TvaBreakdown::from_ttc(Cents(disc_5_5), TvaRate::Reduit5_5);
+        let disc_bd_10  = TvaBreakdown::from_ttc(Cents(disc_10),  TvaRate::Intermediaire10);
+        let disc_bd_20  = TvaBreakdown::from_ttc(Cents(disc_20),  TvaRate::Normal20);
+
+        // Fix 1: ttc_cents du breakdown principal = somme HT+TVA calculée,
+        // pas discount_amount brut. Évite les échecs de validation par
+        // arrondi entier (invariant : ht + tva == ttc doit toujours tenir).
+        let disc_total_ht  = disc_bd_5_5.ht_cents.0 + disc_bd_10.ht_cents.0 + disc_bd_20.ht_cents.0;
+        let disc_total_tva = disc_bd_5_5.tva_cents.0 + disc_bd_10.tva_cents.0 + disc_bd_20.tva_cents.0;
+
+        // Taux dominant de la remise
+        let disc_dominant = if disc_20.abs() >= disc_10.abs() && disc_20.abs() >= disc_5_5.abs() {
+            TvaRate::Normal20
+        } else if disc_10.abs() >= disc_5_5.abs() {
+            TvaRate::Intermediaire10
+        } else {
+            TvaRate::Reduit5_5
+        };
+
+        let disc_bd_main = TvaBreakdown {
+            rate: disc_dominant,
+            ht_cents: Cents(disc_total_ht),
+            tva_cents: Cents(disc_total_tva),
+            // ttc_cents = ht + tva (jamais discount_amount directement —
+            // évite les incohérences d'arrondi qui feraient échouer la validation)
+            ttc_cents: Cents(disc_total_ht + disc_total_tva),
+        };
+
+        let disc_data = FiscalEntryData {
+            session_id,
+            operation_type: OperationType::Discount,
+            amount_ttc_cents: Cents(disc_total_ht + disc_total_tva),
+            tva_breakdown: disc_bd_main,
+            tva_5_5_breakdown: disc_bd_5_5,
+            tva_10_breakdown: disc_bd_10,
+            tva_20_breakdown: disc_bd_20,
+            reason: Some(format!("Promotion: {}", app.promo_name)),
+            order_reference: Some(body.order_reference.clone()),
+        };
+
+        // Fix 2: valider AVANT d'enregistrer la VENTE — échec ici n'a aucun
+        // effet sur le journal (la vente n'est pas encore commitée).
+        disc_data.validate().map_err(|msg| {
+            FiscalError::InvalidAmount {
+                amount_cents: disc_data.amount_ttc_cents.0,
+                operation: format!("DISCOUNT pré-validation: {msg}"),
+            }
+        })?;
+
+        pending_discounts.push(DiscountEntry {
+            data: disc_data,
+            promo_id: app.promo_id.to_string(),
+            promo_name: app.promo_name.clone(),
+            discount_cents: app.discount_cents,
+        });
+    }
+
+    // Toutes les entrées DISCOUNT sont valides — on peut maintenant committer la VENTE.
     let entry = state.journal.record_transaction(data).await?;
     let order_id = Uuid::now_v7().to_string();
+
+    // Enregistrer les entrées DISCOUNT dans le journal fiscal (bloquant)
+    // (NF525 : chaque remise doit être tracée dans le journal)
+    let mut applied_promo_responses: Vec<AppliedPromoResponse> = Vec::new();
+
+    for discount in pending_discounts {
+        let _disc_entry = state.journal.record_transaction(discount.data).await?;
+
+        applied_promo_responses.push(AppliedPromoResponse {
+            promo_id: discount.promo_id,
+            name: discount.promo_name,
+            discount_cents: discount.discount_cents,
+        });
+    }
 
     Ok((
         StatusCode::CREATED,
         Json(OrderResponse {
             order_id,
             fiscal_entry: FiscalEntryResponse::from(&entry),
+            applied_promos: applied_promo_responses,
         }),
     ))
 }
@@ -476,7 +757,9 @@ pub async fn cancel_order_handler(
                 rate: dominant,
                 ht_cents: Cents(total_ht),
                 tva_cents: Cents(total_tva),
-                ttc_cents: Cents(cancel_amount),
+                // ttc_cents = ht + tva (jamais cancel_amount directement — évite
+                // les incohérences d'arrondi qui feraient échouer la validation TVA)
+                ttc_cents: Cents(total_ht + total_tva),
             };
             (bd_5_5, bd_10, bd_20, bd_main)
         } else {
@@ -516,6 +799,7 @@ pub async fn cancel_order_handler(
         Json(OrderResponse {
             order_id: Uuid::now_v7().to_string(),
             fiscal_entry: FiscalEntryResponse::from(&entry),
+            applied_promos: Vec::new(),
         }),
     ))
 }
