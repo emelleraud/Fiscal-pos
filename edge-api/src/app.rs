@@ -38,8 +38,6 @@ pub struct AppState {
     /// Journal fiscal — point d'entrée unique pour toutes les opérations NF525.
     pub journal: Arc<Journal>,
     /// Pool SQLite partagé (direct access pour promotions et autres tables).
-    // Utilisé par les futurs handlers (promotions, etc.) — non fatal si non lu par le bin.
-    #[allow(dead_code)]
     pub db: SqlitePool,
     /// Chemin du répertoire de données local du restaurant.
     pub data_dir: String,

@@ -48,7 +48,7 @@ struct RemotePromo {
 /// Nombre de promotions traitées.
 ///
 /// # Errors
-/// `SyncError::FatalConfig` si une insertion SQLite échoue.
+/// `SyncError::Database` si une insertion SQLite échoue (non fatal — warn + continue en sync_loop).
 pub async fn pull_promotions(
     client: &SupabaseClient,
     config: &SyncConfig,
@@ -103,9 +103,7 @@ pub async fn pull_promotions(
         .bind(p.updated_at_ms)
         .execute(pool)
         .await
-        .map_err(|e| SyncError::FatalConfig {
-            reason: e.to_string(),
-        })?;
+        .map_err(SyncError::Database)?;
     }
 
     if count > 0 {

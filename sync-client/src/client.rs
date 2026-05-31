@@ -329,6 +329,7 @@ impl SupabaseClient {
         &self,
         site_id: &str,
     ) -> Result<Vec<serde_json::Value>, SyncError> {
+        // site_id is always a UUID — hex chars + hyphens are URL-safe, no encoding needed
         let url = format!(
             "{}/rest/v1/promotions?select=*&active=eq.true&or=(scope.eq.chain,site_id.eq.{})",
             self.base_url, site_id

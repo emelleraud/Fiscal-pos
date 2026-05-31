@@ -222,19 +222,14 @@ pub async fn run_sync_cycle(
                 warn!(error = %e, "Impossible de récupérer la configuration — non fatal");
             }
         }
+    }
 
-        // 7. Pull des promotions actives depuis Supabase → upsert SQLite local
-        match pull_promotions(client, config, store.pool_ref()).await {
-            Ok(n) if n > 0 => {
-                info!(count = n, "Promotions mises à jour");
-            }
-            Ok(_) => {
-                debug!("Promotions à jour, pas de mise à jour");
-            }
-            Err(e) => {
-                warn!(error = %e, "Impossible de récupérer les promotions — non fatal");
-            }
-        }
+    // 7. Pull des promotions actives depuis Supabase → upsert SQLite local
+    // (opération read-only indépendante du succès des pushs)
+    if let Err(e) = pull_promotions(client, config, store.pool_ref()).await {
+        warn!(error = %e, "Échec du pull des promotions (non fatal)");
+    } else {
+        debug!("Promotions vérifiées depuis Supabase");
     }
 
     metrics.duration_ms = cycle_start.elapsed().as_millis() as u64;
