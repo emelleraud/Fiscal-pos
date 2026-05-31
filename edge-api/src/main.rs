@@ -76,6 +76,7 @@ async fn main() {
         }
     };
 
+    let db = pool.clone();
     let journal = match Journal::open(pool).await {
         Ok(j) => j,
         Err(e) => {
@@ -90,7 +91,7 @@ async fn main() {
         info!("Aucune session active au démarrage");
     }
 
-    let state = AppState::new(journal, config.data_dir.clone());
+    let state = AppState::new(journal, db, config.data_dir.clone());
     let app = build_app(state);
 
     let addr: SocketAddr = format!("{}:{}", config.host, config.port)

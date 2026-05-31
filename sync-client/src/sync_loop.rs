@@ -60,6 +60,7 @@ use crate::{
     config::SyncConfig,
     config_puller::pull_and_apply_config,
     error::SyncError,
+    promo_puller::pull_promotions,
 };
 use fiscal_engine::journal::store::JournalStore;
 
@@ -219,6 +220,19 @@ pub async fn run_sync_cycle(
             }
             Err(e) => {
                 warn!(error = %e, "Impossible de récupérer la configuration — non fatal");
+            }
+        }
+
+        // 7. Pull des promotions actives depuis Supabase → upsert SQLite local
+        match pull_promotions(client, config, store.pool_ref()).await {
+            Ok(n) if n > 0 => {
+                info!(count = n, "Promotions mises à jour");
+            }
+            Ok(_) => {
+                debug!("Promotions à jour, pas de mise à jour");
+            }
+            Err(e) => {
+                warn!(error = %e, "Impossible de récupérer les promotions — non fatal");
             }
         }
     }

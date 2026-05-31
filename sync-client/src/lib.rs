@@ -7,5 +7,6 @@ pub mod client;
 pub mod config;
 pub mod config_puller;
 pub mod error;
+pub mod promo_puller;
 pub mod serializer;
 pub mod sync_loop;

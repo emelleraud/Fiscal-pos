@@ -313,6 +313,48 @@ impl SupabaseClient {
     }
 
     // -----------------------------------------------------------------------
+    // Pull des promotions
+    // -----------------------------------------------------------------------
+
+    /// Récupère les promotions actives pour ce site depuis Supabase.
+    ///
+    /// Retourne les promotions chain-level et site-level (filtre groupe côté caisse — MVP).
+    ///
+    /// # Arguments
+    /// * `site_id` - Identifiant du restaurant.
+    ///
+    /// # Errors
+    /// - `SyncError::Network` sur erreur réseau ou désérialisation
+    pub async fn pull_promotions(
+        &self,
+        site_id: &str,
+    ) -> Result<Vec<serde_json::Value>, SyncError> {
+        let url = format!(
+            "{}/rest/v1/promotions?select=*&active=eq.true&or=(scope.eq.chain,site_id.eq.{})",
+            self.base_url, site_id
+        );
+
+        debug!(url = %url, site_id = %site_id, "Pull promotions depuis Supabase");
+
+        let resp = self
+            .client
+            .get(&url)
+            .header("apikey", &self.service_key)
+            .header("Authorization", format!("Bearer {}", self.service_key))
+            .header("Accept", "application/json")
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            warn!(status = %resp.status(), "pull_promotions HTTP error");
+            return Ok(vec![]);
+        }
+
+        let promos: Vec<serde_json::Value> = resp.json().await?;
+        Ok(promos)
+    }
+
+    // -----------------------------------------------------------------------
     // Healthcheck Supabase
     // -----------------------------------------------------------------------
 

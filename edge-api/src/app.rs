@@ -19,6 +19,7 @@
 use std::sync::Arc;
 
 use axum::{middleware, Router};
+use sqlx::sqlite::SqlitePool;
 use tower_http::trace::TraceLayer;
 
 use fiscal_engine::Journal;
@@ -36,6 +37,10 @@ use crate::{middleware as mw, routes};
 pub struct AppState {
     /// Journal fiscal — point d'entrée unique pour toutes les opérations NF525.
     pub journal: Arc<Journal>,
+    /// Pool SQLite partagé (direct access pour promotions et autres tables).
+    // Utilisé par les futurs handlers (promotions, etc.) — non fatal si non lu par le bin.
+    #[allow(dead_code)]
+    pub db: SqlitePool,
     /// Chemin du répertoire de données local du restaurant.
     pub data_dir: String,
 }
@@ -45,11 +50,13 @@ impl AppState {
     ///
     /// # Arguments
     /// * `journal` - Journal fiscal initialisé avec la pool SQLite.
+    /// * `db` - Pool SQLite partagé.
     /// * `data_dir` - Chemin du répertoire de données (menu.json, archives).
     #[must_use]
-    pub fn new(journal: Journal, data_dir: String) -> Self {
+    pub fn new(journal: Journal, db: SqlitePool, data_dir: String) -> Self {
         Self {
             journal: Arc::new(journal),
+            db,
             data_dir,
         }
     }

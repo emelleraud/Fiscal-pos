@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 fiscal-engine = { path = "../fiscal-engine" }
+promo-engine = { path = "../promo-engine" }
 ed25519-dalek = { workspace = true }
 common = { path = "../common" }
 serde = { workspace = true }
