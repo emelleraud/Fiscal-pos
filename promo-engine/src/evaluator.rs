@@ -305,4 +305,147 @@ mod tests {
         let r = evaluate(&cart_1000(), &[p], &[id], datetime!(2026-05-31 10:00 UTC));
         assert_eq!(r.applied.len(), 1);
     }
+
+    #[test]
+    fn fixed_amount_discount_applied() {
+        let p = Promotion { value_cents: Some(200), ..base_promo(10) };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied[0].discount_cents, 200);
+    }
+
+    #[test]
+    fn fixed_amount_capped_at_cart_total() {
+        let p = Promotion { value_cents: Some(9999), ..base_promo(11) };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied[0].discount_cents, 1000);
+    }
+
+    #[test]
+    fn percentage_10_percent() {
+        let p = Promotion {
+            promo_type: PromoType::Percentage,
+            value_cents: None,
+            value_bps: Some(1000), // 10%
+            ..base_promo(12)
+        };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied[0].discount_cents, 100);
+    }
+
+    #[test]
+    fn item_discount_sku_absent_rejected() {
+        let p = Promotion {
+            promo_type: PromoType::ItemDiscount,
+            target_sku: Some("ABSENT".into()),
+            value_cents: Some(100),
+            ..base_promo(13)
+        };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert!(r.applied.is_empty());
+    }
+
+    #[test]
+    fn bogo_gives_cheapest_item_free() {
+        let cart = Cart {
+            line_items: vec![
+                CartItem { sku: "BUR".into(), amount_ttc_cents: 900, tva_rate: TvaRateKey::Intermediaire10 },
+                CartItem { sku: "BUR".into(), amount_ttc_cents: 1200, tva_rate: TvaRateKey::Intermediaire10 },
+            ],
+            total_ttc_cents: 2100,
+        };
+        let p = Promotion {
+            promo_type: PromoType::Bogo,
+            target_sku: Some("BUR".into()),
+            value_cents: None,
+            ..base_promo(14)
+        };
+        let r = evaluate(&cart, &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied[0].discount_cents, 900); // cheapest item free
+    }
+
+    #[test]
+    fn exclusion_group_highest_priority_wins() {
+        let p1 = Promotion { exclusion_group: Some("g".into()), priority: 5,  value_cents: Some(300), ..base_promo(15) };
+        let p2 = Promotion { exclusion_group: Some("g".into()), priority: 10, value_cents: Some(50),  ..base_promo(16) };
+        let r = evaluate(&cart_1000(), &[p1, p2], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied.len(), 1);
+        assert_eq!(r.applied[0].discount_cents, 50); // p2 priority 10 wins
+        assert_eq!(r.rejected.len(), 1);
+    }
+
+    #[test]
+    fn exclusion_group_tie_biggest_discount_wins() {
+        let p1 = Promotion { exclusion_group: Some("g".into()), priority: 0, value_cents: Some(200), ..base_promo(17) };
+        let p2 = Promotion { exclusion_group: Some("g".into()), priority: 0, value_cents: Some(500), ..base_promo(18) };
+        let r = evaluate(&cart_1000(), &[p1, p2], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied[0].discount_cents, 500);
+    }
+
+    #[test]
+    fn no_group_all_cumulated() {
+        let p1 = Promotion { value_cents: Some(100), ..base_promo(19) };
+        let p2 = Promotion { value_cents: Some(200), ..base_promo(20) };
+        let r = evaluate(&cart_1000(), &[p1, p2], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied.len(), 2);
+    }
+
+    #[test]
+    fn tva_allocation_single_rate_coherent() {
+        let p = Promotion { value_cents: Some(100), ..base_promo(21) };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        let a = &r.applied[0].tva_allocation;
+        assert_eq!(a.total(), 100);
+        assert_eq!(a.cents_5_5, 0);
+        assert_eq!(a.cents_10, 100);
+        assert_eq!(a.cents_20, 0);
+    }
+
+    #[test]
+    fn tva_allocation_multi_rate_proportional() {
+        // 600 @ 10% + 400 @ 20% = 1000 total ; discount 100
+        let cart = Cart {
+            line_items: vec![
+                CartItem { sku: "A".into(), amount_ttc_cents: 600, tva_rate: TvaRateKey::Intermediaire10 },
+                CartItem { sku: "B".into(), amount_ttc_cents: 400, tva_rate: TvaRateKey::Normal20 },
+            ],
+            total_ttc_cents: 1000,
+        };
+        let p = Promotion { value_cents: Some(100), ..base_promo(22) };
+        let r = evaluate(&cart, &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        let a = &r.applied[0].tva_allocation;
+        assert_eq!(a.total(), 100);
+        assert_eq!(a.cents_10, 60);
+        assert_eq!(a.cents_20, 40);
+    }
+
+    #[test]
+    fn bogo_single_item_not_discounted() {
+        // Only 1 item: BOGO requires >= 2 — should NOT apply
+        let cart = Cart {
+            line_items: vec![
+                CartItem { sku: "BUR".into(), amount_ttc_cents: 900, tva_rate: TvaRateKey::Intermediaire10 },
+            ],
+            total_ttc_cents: 900,
+        };
+        let p = Promotion {
+            promo_type: PromoType::Bogo,
+            target_sku: Some("BUR".into()),
+            value_cents: None,
+            ..base_promo(23)
+        };
+        let r = evaluate(&cart, &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert!(r.applied.is_empty(), "BOGO ne doit pas s'appliquer avec 1 seul article");
+    }
+
+    #[test]
+    fn happy_hour_percentage_applied() {
+        let p = Promotion {
+            promo_type: PromoType::HappyHour,
+            value_cents: None,
+            value_bps: Some(2000), // 20%
+            ..base_promo(24)
+        };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied[0].discount_cents, 200);
+    }
 }
