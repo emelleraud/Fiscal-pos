@@ -10,11 +10,12 @@
 
 import React, { useState } from 'react';
 import { useMenu, useOrder } from '@/hooks/useOrder';
-import { useUiStore } from '@/store';
+import { useOrderStore, useUiStore } from '@/store';
 import { Header, StatusBar } from '@/components/layout/Header';
 import { Button, Card, Spinner, AlertBanner, Badge } from '@/components/ui';
 import { formatCents } from '@/api/client';
 import type { MenuItem } from '@/api/client';
+import { PromoModal } from '@/components/PromoModal';
 
 // ---------------------------------------------------------------------------
 // Grille des produits
@@ -92,8 +93,12 @@ function ProductGrid({
 
 function CartPanel({
   order,
+  setShowPromos,
+  selectedPromoIds,
 }: {
   order: ReturnType<typeof useOrder>;
+  setShowPromos: (v: boolean) => void;
+  selectedPromoIds: string[];
 }): React.ReactElement {
   const isEmpty = order.cart.length === 0;
 
@@ -164,6 +169,16 @@ function CartPanel({
         </div>
 
         <Button
+          variant="ghost"
+          size="sm"
+          fullWidth
+          onClick={() => setShowPromos(true)}
+          className={selectedPromoIds.length > 0 ? 'border border-blue-500 text-blue-400' : ''}
+        >
+          🏷️ Promos{selectedPromoIds.length > 0 ? ` (${selectedPromoIds.length})` : ''}
+        </Button>
+
+        <Button
           variant="success"
           size="lg"
           fullWidth
@@ -199,6 +214,8 @@ export function OrderScreen(): React.ReactElement {
   const navigateTo = useUiStore((s) => s.navigateTo);
   const globalError = useUiStore((s) => s.globalError);
   const setGlobalError = useUiStore((s) => s.setGlobalError);
+  const [showPromos, setShowPromos] = useState(false);
+  const selectedPromoIds = useOrderStore((s) => s.selectedPromoIds);
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 text-white">
@@ -241,10 +258,16 @@ export function OrderScreen(): React.ReactElement {
         {menu && !isLoading && (
           <>
             <ProductGrid items={menu.items} onAdd={order.addItem} />
-            <CartPanel order={order} />
+            <CartPanel
+              order={order}
+              setShowPromos={setShowPromos}
+              selectedPromoIds={selectedPromoIds}
+            />
           </>
         )}
       </main>
+
+      {showPromos && <PromoModal onClose={() => setShowPromos(false)} />}
 
       <StatusBar />
     </div>

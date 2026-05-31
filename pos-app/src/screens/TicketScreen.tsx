@@ -18,6 +18,7 @@ export function TicketScreen(): React.ReactElement {
   const totalCents = useOrderStore((s) => s.cart.reduce((acc, i) => acc + i.totalCents, 0));
   const paymentMethod = useOrderStore((s) => s.selectedPaymentMethod);
   const amountPaid = useOrderStore((s) => s.amountPaidCents);
+  const appliedPromos = useOrderStore((s) => s.appliedPromos);
   const resetOrder = useOrderStore((s) => s.resetOrder);
   const session = useSessionStore((s) => s.session);
   const navigateTo = useUiStore((s) => s.navigateTo);
@@ -70,6 +71,20 @@ export function TicketScreen(): React.ReactElement {
               <span className="text-white">Total TTC</span>
               <span className="text-white text-lg">{formatCents(totalCents)}</span>
             </div>
+
+            {appliedPromos.length > 0 && (
+              <>
+                <div className="border-t border-gray-700 pt-2 mt-1">
+                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-2">Remises appliquées</p>
+                  {appliedPromos.map((p) => (
+                    <div key={p.promo_id} className="flex justify-between text-sm">
+                      <span className="text-green-400">🏷️ {p.name}</span>
+                      <span className="text-green-400 font-medium">-{(p.discount_cents / 100).toFixed(2)} €</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Paiement */}

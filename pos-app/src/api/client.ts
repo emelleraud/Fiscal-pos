@@ -72,9 +72,26 @@ export interface FiscalEntryResponse {
   created_at_ms: number;
 }
 
+export interface AvailablePromo {
+  id: string;
+  name: string;
+  promo_type: string;
+  trigger: 'auto' | 'manual';
+  value_cents: number | null;
+  value_bps: number | null;
+  target_sku: string | null;
+}
+
+export interface AppliedPromo {
+  promo_id: string;
+  name: string;
+  discount_cents: number;
+}
+
 export interface OrderResponse {
   order_id: string;
   fiscal_entry: FiscalEntryResponse;
+  applied_promos: AppliedPromo[];
 }
 
 export interface ZReportSummary {
@@ -205,12 +222,14 @@ export const closeSession = (): Promise<CloseSessionResponse> =>
 export interface LineItem {
   amount_ttc_cents: number;
   tva_rate: TvaRate;
+  sku?: string;
 }
 
 export interface CreateOrderPayload {
   order_reference: string;
   line_items: LineItem[];
   payment_method: PaymentMethod;
+  manual_promo_ids?: string[];
 }
 
 export const createOrder = (payload: CreateOrderPayload): Promise<OrderResponse> =>
@@ -245,6 +264,13 @@ export const cancelOrder = (orderId: string, payload: CancelOrderPayload): Promi
     method: 'POST',
     body: JSON.stringify(payload),
   });
+
+// ---------------------------------------------------------------------------
+// API Promotions
+// ---------------------------------------------------------------------------
+
+export const getAvailablePromotions = (): Promise<AvailablePromo[]> =>
+  apiFetch<AvailablePromo[]>('/api/v1/promotions/available');
 
 // ---------------------------------------------------------------------------
 // Utilitaires

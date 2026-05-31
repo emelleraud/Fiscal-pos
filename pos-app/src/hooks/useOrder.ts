@@ -145,6 +145,8 @@ export function useOrder() {
   const currentFiscalEntry = useOrderStore((s) => s.currentFiscalEntry);
   const selectedPaymentMethod = useOrderStore((s) => s.selectedPaymentMethod);
   const amountPaidCents = useOrderStore((s) => s.amountPaidCents);
+  const selectedPromoIds = useOrderStore((s) => s.selectedPromoIds);
+  const setAppliedPromos = useOrderStore((s) => s.setAppliedPromos);
 
   const session = useSessionStore((s) => s.session);
   const navigateTo = useUiStore((s) => s.navigateTo);
@@ -161,12 +163,15 @@ export function useOrder() {
         line_items: cart.map(({ menuItem, quantity }) => ({
           amount_ttc_cents: menuItem.price_ttc_cents * quantity,
           tva_rate: menuTvaRateToApi(menuItem.tva_rate),
+          sku: menuItem.id,
         })),
         payment_method: 'card', // Sera confirmé à l'étape paiement
+        manual_promo_ids: selectedPromoIds,
       });
     },
     onSuccess: (response) => {
       setCurrentOrder(response.order_id, response.fiscal_entry);
+      setAppliedPromos(response.applied_promos ?? []);
       navigateTo('payment');
       setGlobalError(null);
     },

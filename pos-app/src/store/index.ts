@@ -12,7 +12,7 @@
  */
 
 import { create } from 'zustand';
-import type { SessionResponse, FiscalEntryResponse, ZReportSummary, MenuItem } from '@/api/client';
+import type { SessionResponse, FiscalEntryResponse, ZReportSummary, MenuItem, AppliedPromo } from '@/api/client';
 
 // ---------------------------------------------------------------------------
 // Types internes
@@ -70,6 +70,11 @@ interface OrderState {
   /** Montant encaissé en espèces (pour le calcul du rendu monnaie) */
   amountPaidCents: number;
 
+  /** IDs des promotions manuelles sélectionnées */
+  selectedPromoIds: string[];
+  /** Promotions effectivement appliquées par l'API */
+  appliedPromos: AppliedPromo[];
+
   /** Actions */
   addItem: (item: MenuItem) => void;
   removeItem: (itemId: string) => void;
@@ -78,6 +83,8 @@ interface OrderState {
   setCurrentOrder: (orderId: string, entry: FiscalEntryResponse) => void;
   setPaymentMethod: (method: 'card' | 'cash' | 'meal_voucher') => void;
   setAmountPaid: (cents: number) => void;
+  setSelectedPromoIds: (ids: string[]) => void;
+  setAppliedPromos: (promos: AppliedPromo[]) => void;
   resetOrder: () => void;
 }
 
@@ -87,6 +94,8 @@ export const useOrderStore = create<OrderState>((set) => ({
   currentFiscalEntry: null,
   selectedPaymentMethod: null,
   amountPaidCents: 0,
+  selectedPromoIds: [],
+  appliedPromos: [],
 
   addItem: (item) =>
     set((state) => {
@@ -138,6 +147,10 @@ export const useOrderStore = create<OrderState>((set) => ({
 
   setAmountPaid: (cents) => set({ amountPaidCents: cents }),
 
+  setSelectedPromoIds: (ids) => set({ selectedPromoIds: ids }),
+
+  setAppliedPromos: (promos) => set({ appliedPromos: promos }),
+
   resetOrder: () =>
     set({
       cart: [],
@@ -145,6 +158,8 @@ export const useOrderStore = create<OrderState>((set) => ({
       currentFiscalEntry: null,
       selectedPaymentMethod: null,
       amountPaidCents: 0,
+      selectedPromoIds: [],
+      appliedPromos: [],
     }),
 }));
 
