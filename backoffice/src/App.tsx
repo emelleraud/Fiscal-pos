@@ -14,6 +14,10 @@ import ProductList from './pages/ProductList'
 import ProductForm from './pages/ProductForm'
 import ComboList from './pages/ComboList'
 import ComboForm from './pages/ComboForm'
+import GroupList from './pages/GroupList'
+import GroupForm from './pages/GroupForm'
+import PromotionList from './pages/PromotionList'
+import PromotionForm from './pages/PromotionForm'
 
 export default function App() {
   return (
@@ -37,6 +41,12 @@ export default function App() {
                 <Route path="/combos/:id"     element={<ComboForm />} />
                 <Route path="/modifiers"      element={<ModifierGroupManager />} />
                 <Route path="/menu"           element={<MenuManager />} />
+                <Route path="/promotions"     element={<PromotionList />} />
+                <Route path="/promotions/new" element={<PromotionForm />} />
+                <Route path="/promotions/:id" element={<PromotionForm />} />
+                <Route path="/groups"         element={<GroupList />} />
+                <Route path="/groups/new"     element={<GroupForm />} />
+                <Route path="/groups/:id"     element={<GroupForm />} />
               </Route>
             </Route>
           </Routes>

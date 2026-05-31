@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useSite } from '../context/SiteContext'
+import { useRole } from '../hooks/useRole'
 
 type NavItem = { to: string; label: string } | { divider: true; label: string }
 
@@ -15,11 +16,14 @@ const navItems: NavItem[] = [
   { to: '/modifiers',      label: '🔧 Modificateurs' },
   { divider: true, label: 'Config site' },
   { to: '/menu',           label: '📤 Config publiée' },
+  { divider: true, label: 'Marketing' },
+  { to: '/promotions',     label: '🏷️ Promotions' },
 ]
 
 export default function Layout() {
   const { signOut } = useAuth()
   const { sites, activeSiteId, setActiveSiteId } = useSite()
+  const { hasRole } = useRole()
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui', fontSize: '14px' }}>
@@ -77,6 +81,25 @@ export default function Layout() {
               {item.label}
             </NavLink>
           )
+        )}
+
+        {hasRole('director') && (
+          <NavLink
+            to="/groups"
+            style={({ isActive }) => ({
+              display: 'block',
+              padding: '0.55rem 0.75rem',
+              borderRadius: 6,
+              textDecoration: 'none',
+              color: isActive ? '#fff' : '#888',
+              background: isActive ? '#16213e' : 'transparent',
+              borderLeft: isActive ? '3px solid #4f8ef7' : '3px solid transparent',
+              transition: 'all 0.15s',
+              fontSize: '0.85rem',
+            })}
+          >
+            🏘️ Groupes
+          </NavLink>
         )}
 
         <button
