@@ -783,7 +783,10 @@ pub async fn cancel_order_handler(
     let data = FiscalEntryData {
         session_id,
         operation_type: OperationType::Cancel,
-        amount_ttc_cents: Cents(cancel_amount),
+        // Utiliser ht + tva calculés (= tva_breakdown.ttc_cents) plutôt que
+        // cancel_amount brut : évite les écarts d'un centime par arrondi entier
+        // sur les annulations multi-taux (même logique que le fix DISCOUNT).
+        amount_ttc_cents: Cents(tva_breakdown.ht_cents.0 + tva_breakdown.tva_cents.0),
         tva_breakdown,
         tva_5_5_breakdown,
         tva_10_breakdown,
