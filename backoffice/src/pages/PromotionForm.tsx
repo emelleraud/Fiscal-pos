@@ -76,6 +76,10 @@ export default function PromotionForm() {
   const handleSave = async (submitForApproval = false) => {
     setSaving(true); setError(null)
     try {
+      if (!name.trim()) throw new Error('Le nom est obligatoire')
+      if (scope === 'site' && !siteId) throw new Error('Veuillez sélectionner un site')
+      if (scope === 'group' && !groupId) throw new Error('Veuillez sélectionner un groupe')
+
       const payload: Record<string, unknown> = {
         name, scope, trigger, promo_type: promoType,
         value_cents: valueCents ? parseInt(valueCents,10) : null,
