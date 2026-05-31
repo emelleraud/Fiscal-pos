@@ -8,6 +8,15 @@ const PROMO_TYPES = ['fixed_amount','percentage','item_discount','bogo','happy_h
 const DAYS = [{ v: 1, l: 'Lun' },{ v: 2, l: 'Mar' },{ v: 3, l: 'Mer' },
               { v: 4, l: 'Jeu' },{ v: 5, l: 'Ven' },{ v: 6, l: 'Sam' },{ v: 7, l: 'Dim' }]
 
+const inp = { padding:'0.5rem 0.75rem',border:'1px solid #ddd',borderRadius:6,fontSize:'0.9rem',width:'100%',boxSizing:'border-box' as const }
+
+function FieldLabel({ children }: { children: string }) {
+  return <label style={{ display:'block', fontWeight:600, marginBottom:4, fontSize:'0.85rem' }}>{children}</label>
+}
+function SectionHeader({ children }: { children: string }) {
+  return <h3 style={{ marginTop:'1.5rem', marginBottom:'0.75rem', fontSize:'0.95rem', color:'#444', borderBottom:'1px solid #eee', paddingBottom:4 }}>{children}</h3>
+}
+
 export default function PromotionForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -39,19 +48,25 @@ export default function PromotionForm() {
   const [error, setError] = useState<string|null>(null)
 
   useEffect(() => {
-    supabase.from('sites').select('id,name,site_code').then(({data}) => setSites(data??[]))
-    supabase.from('restaurant_groups').select('id,name').then(({data}) => setGroups(data??[]))
+    supabase.from('sites').select('id,name,site_code').then(({data, error: e}) => {
+      if (e) setError(e.message); else setSites(data ?? [])
+    })
+    supabase.from('restaurant_groups').select('id,name').then(({data, error: e}) => {
+      if (e) setError(e.message); else setGroups(data ?? [])
+    })
     if (isEdit) {
-      supabase.from('promotions').select('*').eq('id',id!).single().then(({data:d}) => {
-        if (!d) return
-        setName(d.name); setScope(d.scope); setSiteId(d.site_id??'')
-        setGroupId(d.group_id??''); setTrigger(d.trigger); setPromoType(d.promo_type)
-        setValueCents(d.value_cents?.toString()??''); setValueBps(d.value_bps?.toString()??'')
-        setTargetSku(d.target_sku??''); setExclusionGroup(d.exclusion_group??'')
-        setPriority(d.priority?.toString()??'0'); setValidFrom(d.valid_from??'')
-        setValidTo(d.valid_to??''); setDaysOfWeek(d.days_of_week??[])
-        setTimeFrom(d.time_from??''); setTimeTo(d.time_to??''); setStatus(d.status)
-      })
+      supabase.from('promotions').select('*').eq('id', id!).single()
+        .then(({ data: d, error: e }) => {
+          if (e) { setError(e.message); return }
+          if (!d) return
+          setName(d.name); setScope(d.scope); setSiteId(d.site_id??'')
+          setGroupId(d.group_id??''); setTrigger(d.trigger); setPromoType(d.promo_type)
+          setValueCents(d.value_cents?.toString()??''); setValueBps(d.value_bps?.toString()??'')
+          setTargetSku(d.target_sku??''); setExclusionGroup(d.exclusion_group??'')
+          setPriority(d.priority?.toString()??'0'); setValidFrom(d.valid_from??'')
+          setValidTo(d.valid_to??''); setDaysOfWeek(d.days_of_week??[])
+          setTimeFrom(d.time_from??''); setTimeTo(d.time_to??''); setStatus(d.status)
+        })
     }
   }, [id, isEdit])
 
@@ -88,15 +103,12 @@ export default function PromotionForm() {
   }
 
   const handleApprove = async () => {
-    await supabase.from('promotions').update({
+    const { error: e } = await supabase.from('promotions').update({
       status: 'approved', approved_by: session?.user?.id, approved_at: new Date().toISOString()
     }).eq('id', id!)
+    if (e) { setError(e.message); return }
     navigate('/promotions')
   }
-
-  const lb = (t: string) => <label style={{ display:'block',fontWeight:600,marginBottom:4,fontSize:'0.85rem' }}>{t}</label>
-  const inp = { padding:'0.5rem 0.75rem',border:'1px solid #ddd',borderRadius:6,fontSize:'0.9rem',width:'100%',boxSizing:'border-box' as const }
-  const sect = (title: string) => <h3 style={{ marginTop:'1.5rem',marginBottom:'0.75rem',fontSize:'0.95rem',color:'#444',borderBottom:'1px solid #eee',paddingBottom:4 }}>{title}</h3>
 
   const needsSku = ['item_discount','bogo'].includes(promoType)
   const needsBps = ['percentage','happy_hour'].includes(promoType)
@@ -107,50 +119,50 @@ export default function PromotionForm() {
       <h2 style={{ marginTop:0 }}>{isEdit ? 'Éditer' : 'Nouvelle'} promotion</h2>
       {error && <p style={{ color:'#e53e3e' }}>{error}</p>}
 
-      {sect('1. Identité')}
-      <div style={{ marginBottom:'0.75rem' }}>{lb('Nom')}<input style={inp} value={name} onChange={e=>setName(e.target.value)} /></div>
+      <SectionHeader>1. Identité</SectionHeader>
+      <div style={{ marginBottom:'0.75rem' }}><FieldLabel>Nom</FieldLabel><input style={inp} value={name} onChange={e=>setName(e.target.value)} /></div>
       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:'0.75rem' }}>
-        <div>{lb('Portée')}<select style={inp} value={scope} onChange={e=>setScope(e.target.value as 'site'|'group'|'chain')}>
+        <div><FieldLabel>Portée</FieldLabel><select style={inp} value={scope} onChange={e=>setScope(e.target.value as 'site'|'group'|'chain')}>
           <option value="site">Site</option><option value="group">Groupe</option><option value="chain">Chaîne</option>
         </select></div>
-        <div>{lb('Déclencheur')}<select style={inp} value={trigger} onChange={e=>setTrigger(e.target.value as 'auto'|'manual')}>
+        <div><FieldLabel>Déclencheur</FieldLabel><select style={inp} value={trigger} onChange={e=>setTrigger(e.target.value as 'auto'|'manual')}>
           <option value="manual">Manuel (caissier)</option><option value="auto">Automatique</option>
         </select></div>
       </div>
-      {scope==='site' && <div style={{ marginBottom:'0.75rem' }}>{lb('Site')}
+      {scope==='site' && <div style={{ marginBottom:'0.75rem' }}><FieldLabel>Site</FieldLabel>
         <select style={inp} value={siteId} onChange={e=>setSiteId(e.target.value)}>
           <option value="">— choisir —</option>
           {sites.map(s=><option key={s.id} value={s.id}>{s.name} ({s.site_code})</option>)}
         </select></div>}
-      {scope==='group' && <div style={{ marginBottom:'0.75rem' }}>{lb('Groupe')}
+      {scope==='group' && <div style={{ marginBottom:'0.75rem' }}><FieldLabel>Groupe</FieldLabel>
         <select style={inp} value={groupId} onChange={e=>setGroupId(e.target.value)}>
           <option value="">— choisir —</option>
           {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
         </select></div>}
 
-      {sect('2. Mécanique')}
-      <div style={{ marginBottom:'0.75rem' }}>{lb('Type de remise')}<select style={inp} value={promoType} onChange={e=>setPromoType(e.target.value)}>
+      <SectionHeader>2. Mécanique</SectionHeader>
+      <div style={{ marginBottom:'0.75rem' }}><FieldLabel>Type de remise</FieldLabel><select style={inp} value={promoType} onChange={e=>setPromoType(e.target.value)}>
         {PROMO_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
       </select></div>
-      {needsCents && <div style={{ marginBottom:'0.75rem' }}>{lb('Montant fixe (centimes)')}
+      {needsCents && <div style={{ marginBottom:'0.75rem' }}><FieldLabel>Montant fixe (centimes)</FieldLabel>
         <input style={inp} type="number" value={valueCents} onChange={e=>setValueCents(e.target.value)} placeholder="ex: 200 = 2,00 €" /></div>}
-      {needsBps && <div style={{ marginBottom:'0.75rem' }}>{lb('Pourcentage (basis points, 1000 = 10%)')}
+      {needsBps && <div style={{ marginBottom:'0.75rem' }}><FieldLabel>Pourcentage (basis points, 1000 = 10%)</FieldLabel>
         <input style={inp} type="number" value={valueBps} onChange={e=>setValueBps(e.target.value)} placeholder="ex: 1000 = 10%" /></div>}
-      {needsSku && <div style={{ marginBottom:'0.75rem' }}>{lb('SKU cible')}
+      {needsSku && <div style={{ marginBottom:'0.75rem' }}><FieldLabel>SKU cible</FieldLabel>
         <input style={inp} value={targetSku} onChange={e=>setTargetSku(e.target.value)} placeholder="ex: BUR-001" /></div>}
 
-      {sect('3. Cumul')}
+      <SectionHeader>3. Cumul</SectionHeader>
       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12 }}>
-        <div>{lb('Groupe d\'exclusion')}<input style={inp} value={exclusionGroup} onChange={e=>setExclusionGroup(e.target.value)} placeholder="ex: remise_panier" /></div>
-        <div>{lb('Priorité')}<input style={inp} type="number" value={priority} onChange={e=>setPriority(e.target.value)} /></div>
+        <div><FieldLabel>{"Groupe d'exclusion"}</FieldLabel><input style={inp} value={exclusionGroup} onChange={e=>setExclusionGroup(e.target.value)} placeholder="ex: remise_panier" /></div>
+        <div><FieldLabel>Priorité</FieldLabel><input style={inp} type="number" value={priority} onChange={e=>setPriority(e.target.value)} /></div>
       </div>
 
-      {sect('4. Validité')}
+      <SectionHeader>4. Validité</SectionHeader>
       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:'0.75rem' }}>
-        <div>{lb('Début')}<input style={inp} type="date" value={validFrom} onChange={e=>setValidFrom(e.target.value)} /></div>
-        <div>{lb('Fin')}<input style={inp} type="date" value={validTo} onChange={e=>setValidTo(e.target.value)} /></div>
+        <div><FieldLabel>Début</FieldLabel><input style={inp} type="date" value={validFrom} onChange={e=>setValidFrom(e.target.value)} /></div>
+        <div><FieldLabel>Fin</FieldLabel><input style={inp} type="date" value={validTo} onChange={e=>setValidTo(e.target.value)} /></div>
       </div>
-      <div style={{ marginBottom:'0.75rem' }}>{lb('Jours de la semaine')}
+      <div style={{ marginBottom:'0.75rem' }}><FieldLabel>Jours de la semaine</FieldLabel>
         <div style={{ display:'flex',gap:8,flexWrap:'wrap',marginTop:4 }}>
           {DAYS.map(d=>(
             <label key={d.v} style={{ display:'flex',alignItems:'center',gap:4,cursor:'pointer',
@@ -163,8 +175,8 @@ export default function PromotionForm() {
         </div>
       </div>
       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12 }}>
-        <div>{lb('Heure début')}<input style={inp} type="time" value={timeFrom} onChange={e=>setTimeFrom(e.target.value)} /></div>
-        <div>{lb('Heure fin')}<input style={inp} type="time" value={timeTo} onChange={e=>setTimeTo(e.target.value)} /></div>
+        <div><FieldLabel>Heure début</FieldLabel><input style={inp} type="time" value={timeFrom} onChange={e=>setTimeFrom(e.target.value)} /></div>
+        <div><FieldLabel>Heure fin</FieldLabel><input style={inp} type="time" value={timeTo} onChange={e=>setTimeTo(e.target.value)} /></div>
       </div>
 
       <div style={{ display:'flex',gap:8,marginTop:'1.5rem',flexWrap:'wrap' }}>
