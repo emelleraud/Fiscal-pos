@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 use crate::types::{Cart, EvalResult, Promotion};
 
+#[must_use]
 pub fn evaluate(
     _cart: &Cart,
     _promos: &[Promotion],

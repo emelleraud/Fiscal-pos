@@ -40,6 +40,7 @@ pub struct Promotion {
     pub time_to: Option<Time>,
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PromoType {
     FixedAmount,
@@ -49,19 +50,20 @@ pub enum PromoType {
     HappyHour,
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Trigger {
     Auto,
     Manual,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalResult {
     pub applied: Vec<PromoApplication>,
     pub rejected: Vec<PromoApplication>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromoApplication {
     pub promo_id: Uuid,
     pub promo_name: String,
@@ -69,7 +71,7 @@ pub struct PromoApplication {
     pub tva_allocation: TvaAllocation,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TvaAllocation {
     pub cents_5_5: i64,
     pub cents_10:  i64,
