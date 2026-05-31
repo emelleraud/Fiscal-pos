@@ -407,6 +407,7 @@ dependencies = [
  "ed25519-dalek",
  "fiscal-engine",
  "hyper",
+ "promo-engine",
  "serde",
  "serde_json",
  "sqlx",
@@ -1358,6 +1359,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "promo-engine"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "time",
+ "uuid",
 ]
 
 [[package]]

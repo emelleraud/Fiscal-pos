@@ -35,8 +35,8 @@ async fn setup() -> (axum::Router, NamedTempFile) {
         .await
         .expect("pool SQLite");
 
-    let journal = Journal::open(pool).await.expect("journal");
-    let state = AppState::new(journal, "/tmp".to_string());
+    let journal = Journal::open(pool.clone()).await.expect("journal");
+    let state = AppState::new(journal, pool, "/tmp".to_string());
     (build_app(state), db_file)
 }
 
