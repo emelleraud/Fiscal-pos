@@ -5,12 +5,14 @@ import { supabase } from '../supabaseClient'
 interface AuthContextValue {
   session: Session | null
   loading: boolean
+  role: string | null
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   loading: true,
+  role: null,
   signOut: async () => {},
 })
 
@@ -29,12 +31,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  const role = (session?.user?.app_metadata?.role ?? null) as string | null
+
   const signOut = async () => {
     await supabase.auth.signOut()
   }
 
   return (
-    <AuthContext.Provider value={{ session, loading, signOut }}>
+    <AuthContext.Provider value={{ session, loading, role, signOut }}>
       {children}
     </AuthContext.Provider>
   )
