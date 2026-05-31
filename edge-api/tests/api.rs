@@ -14,6 +14,7 @@ use tower::ServiceExt;
 
 use edge_api::app::{build_app, AppState};
 use fiscal_engine::{archive_engine::generate_signing_keypair, hex_encode, journal::Journal};
+use serial_test::serial;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -470,6 +471,7 @@ async fn session_accumulators_reflect_orders() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+#[serial]
 async fn archive_no_signing_key_returns_500() {
     let (app, _db) = setup().await;
     // Sans FISCAL_SIGNING_KEY_HEX, la route doit retourner une erreur serveur
@@ -498,6 +500,7 @@ async fn archive_no_data_returns_404() {
 }
 
 #[tokio::test]
+#[serial]
 async fn archive_generates_and_returns_409_on_duplicate() {
     let (app, _db) = setup().await;
     let (priv_bytes, _) = generate_signing_keypair();
