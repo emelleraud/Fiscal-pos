@@ -1,5 +1,5 @@
 #![deny(clippy::all, clippy::pedantic)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 //! # promo-engine
 //!

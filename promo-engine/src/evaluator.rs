@@ -70,10 +70,14 @@ fn weekday_num(w: Weekday) -> u8 {
 
 fn cart_conditions_met(p: &Promotion, cart: &Cart) -> bool {
     match p.promo_type {
-        PromoType::ItemDiscount | PromoType::Bogo => p
+        PromoType::ItemDiscount => p
             .target_sku
             .as_ref()
             .is_some_and(|sku| cart.line_items.iter().any(|i| &i.sku == sku)),
+        PromoType::Bogo => p
+            .target_sku
+            .as_ref()
+            .is_some_and(|sku| cart.line_items.iter().filter(|i| &i.sku == sku).count() >= 2),
         _ => !cart.line_items.is_empty(),
     }
 }
