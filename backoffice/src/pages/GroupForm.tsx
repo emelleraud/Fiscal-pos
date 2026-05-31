@@ -4,10 +4,16 @@ import { supabase } from '../supabaseClient'
 
 interface Site { id: string; site_code: string; name: string }
 
+const inputStyle = { padding: '0.5rem 0.75rem', border: '1px solid #ddd', borderRadius: 6, fontSize: '0.9rem', width: '100%', boxSizing: 'border-box' as const }
+
+function FieldLabel({ txt }: { txt: string }) {
+  return <label style={{ display: 'block', fontWeight: 600, marginBottom: 4, fontSize: '0.85rem' }}>{txt}</label>
+}
+
 export default function GroupForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const isEdit = Boolean(id)
+  const isEdit = id !== undefined && id !== 'new'
 
   const [name, setName] = useState('')
   const [groupType, setGroupType] = useState<'static' | 'dynamic' | 'mixed'>('static')
@@ -19,11 +25,15 @@ export default function GroupForm() {
 
   useEffect(() => {
     supabase.from('sites').select('id, site_code, name').order('site_code')
-      .then(({ data }) => setAllSites(data ?? []))
+      .then(({ data, error: e }) => {
+        if (e) setError(e.message)
+        else setAllSites(data ?? [])
+      })
 
     if (isEdit) {
       supabase.from('restaurant_groups').select('*').eq('id', id!).single()
-        .then(({ data }) => {
+        .then(({ data, error: e }) => {
+          if (e) { setError(e.message); return }
           if (!data) return
           setName(data.name)
           setGroupType(data.group_type)
@@ -62,9 +72,11 @@ export default function GroupForm() {
 
       if (groupType !== 'dynamic') {
         await supabase.from('restaurant_group_members').delete().eq('group_id', groupId!)
-        if (selectedSites.length > 0)
-          await supabase.from('restaurant_group_members')
+        if (selectedSites.length > 0) {
+          const { error: e } = await supabase.from('restaurant_group_members')
             .insert(selectedSites.map(s => ({ group_id: groupId!, site_id: s })))
+          if (e) throw e
+        }
       }
       navigate('/groups')
     } catch (e: unknown) {
@@ -72,18 +84,18 @@ export default function GroupForm() {
     } finally { setSaving(false) }
   }
 
-  const label = (txt: string) => <label style={{ display: 'block', fontWeight: 600, marginBottom: 4, fontSize: '0.85rem' }}>{txt}</label>
-  const inputStyle = { padding: '0.5rem 0.75rem', border: '1px solid #ddd', borderRadius: 6, fontSize: '0.9rem', width: '100%', boxSizing: 'border-box' as const }
-
   return (
     <div style={{ padding: '1.5rem', maxWidth: 600 }}>
       <h2 style={{ marginTop: 0 }}>{isEdit ? 'Éditer' : 'Nouveau'} groupe</h2>
       {error && <p style={{ color: '#e53e3e' }}>{error}</p>}
 
-      <div style={{ marginBottom: '1rem' }}>{label('Nom')}<input style={inputStyle} value={name} onChange={e => setName(e.target.value)} /></div>
+      <div style={{ marginBottom: '1rem' }}>
+        <FieldLabel txt="Nom" />
+        <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} />
+      </div>
 
       <div style={{ marginBottom: '1rem' }}>
-        {label('Type')}
+        <FieldLabel txt="Type" />
         <select style={inputStyle} value={groupType} onChange={e => setGroupType(e.target.value as 'static' | 'dynamic' | 'mixed')}>
           <option value="static">Statique (liste manuelle)</option>
           <option value="dynamic">Dynamique (critères)</option>
@@ -93,7 +105,7 @@ export default function GroupForm() {
 
       {groupType !== 'static' && (
         <div style={{ marginBottom: '1rem' }}>
-          {label('Critères JSON (ex: {"ville":"Paris"})')}
+          <FieldLabel txt='Critères JSON (ex: {"ville":"Paris"})' />
           <textarea style={{ ...inputStyle, height: 100, fontFamily: 'monospace', resize: 'vertical' }}
             value={criteria} onChange={e => setCriteria(e.target.value)} />
         </div>
@@ -101,7 +113,7 @@ export default function GroupForm() {
 
       {groupType !== 'dynamic' && (
         <div style={{ marginBottom: '1rem' }}>
-          {label('Sites membres')}
+          <FieldLabel txt="Sites membres" />
           <div style={{ border: '1px solid #ddd', borderRadius: 6, maxHeight: 200, overflowY: 'auto', padding: '0.5rem' }}>
             {allSites.map(s => (
               <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.25rem 0', cursor: 'pointer' }}>
