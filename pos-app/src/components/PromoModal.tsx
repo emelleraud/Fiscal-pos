@@ -21,10 +21,12 @@ export function PromoModal({ onClose }: Props): React.ReactElement {
   const [selected, setSelected] = useState<string[]>(selectedPromoIds);
 
   useEffect(() => {
+    let mounted = true
     getAvailablePromotions()
-      .then(setPromos)
-      .catch(() => setPromos([]))
-      .finally(() => setLoading(false));
+      .then(data => { if (mounted) setPromos(data) })
+      .catch(() => { if (mounted) setPromos([]) })
+      .finally(() => { if (mounted) setLoading(false) })
+    return () => { mounted = false }
   }, []);
 
   const autoPromos = promos.filter((p) => p.trigger === 'auto');
@@ -41,8 +43,8 @@ export function PromoModal({ onClose }: Props): React.ReactElement {
   };
 
   const formatDiscount = (p: AvailablePromo): string => {
-    if (p.value_cents) return `-${(p.value_cents / 100).toFixed(2)} €`;
-    if (p.value_bps) return `-${(p.value_bps / 100).toFixed(0)} %`;
+    if (p.value_cents !== null) return `-${(p.value_cents / 100).toFixed(2)} €`;
+    if (p.value_bps !== null)   return `-${(p.value_bps / 100).toFixed(0)} %`;
     return 'offert';
   };
 
