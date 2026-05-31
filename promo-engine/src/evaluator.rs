@@ -345,6 +345,18 @@ mod tests {
     }
 
     #[test]
+    fn item_discount_sku_present_applied() {
+        let p = Promotion {
+            promo_type: PromoType::ItemDiscount,
+            target_sku: Some("SKU-A".into()), // SKU-A exists in cart_1000()
+            value_cents: Some(150),
+            ..base_promo(25)
+        };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied[0].discount_cents, 150);
+    }
+
+    #[test]
     fn bogo_gives_cheapest_item_free() {
         let cart = Cart {
             line_items: vec![
@@ -378,7 +390,10 @@ mod tests {
         let p1 = Promotion { exclusion_group: Some("g".into()), priority: 0, value_cents: Some(200), ..base_promo(17) };
         let p2 = Promotion { exclusion_group: Some("g".into()), priority: 0, value_cents: Some(500), ..base_promo(18) };
         let r = evaluate(&cart_1000(), &[p1, p2], &[], datetime!(2026-05-31 10:00 UTC));
+        assert_eq!(r.applied.len(), 1);
         assert_eq!(r.applied[0].discount_cents, 500);
+        assert_eq!(r.rejected.len(), 1);
+        assert_eq!(r.rejected[0].discount_cents, 200);
     }
 
     #[test]
@@ -447,5 +462,19 @@ mod tests {
         };
         let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
         assert_eq!(r.applied[0].discount_cents, 200);
+    }
+
+    #[test]
+    fn happy_hour_outside_window_rejected() {
+        let p = Promotion {
+            promo_type: PromoType::HappyHour,
+            value_cents: None,
+            value_bps: Some(2000),
+            time_from: Some(time!(16:00)),
+            time_to:   Some(time!(18:00)),
+            ..base_promo(26)
+        };
+        let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 14:00 UTC));
+        assert!(r.applied.is_empty(), "HappyHour hors fenêtre horaire ne doit pas s'appliquer");
     }
 }
