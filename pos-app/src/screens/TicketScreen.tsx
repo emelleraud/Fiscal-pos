@@ -23,7 +23,9 @@ export function TicketScreen(): React.ReactElement {
   const session = useSessionStore((s) => s.session);
   const navigateTo = useUiStore((s) => s.navigateTo);
 
-  const changeCents = paymentMethod === 'cash' ? amountPaid - totalCents : 0;
+  const discountTotal = appliedPromos.reduce((s, p) => s + p.discount_cents, 0);
+  const netTotal = Math.max(0, totalCents - discountTotal);
+  const changeCents = paymentMethod === 'cash' ? amountPaid - netTotal : 0;
 
   const handlePrint = () => {
     window.print();
