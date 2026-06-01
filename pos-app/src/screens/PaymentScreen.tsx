@@ -14,7 +14,7 @@
 
 import React, { useState } from 'react';
 import { useOrder } from '@/hooks/useOrder';
-import { useUiStore } from '@/store';
+import { useOrderStore, useUiStore, selectNetTotal, selectDiscountTotal } from '@/store';
 import { Header, StatusBar } from '@/components/layout/Header';
 import { Button } from '@/components/ui';
 import { formatCents } from '@/api/client';
@@ -27,11 +27,14 @@ const CASH_PRESETS = [500, 1000, 2000, 5000]; // centimes : 5€, 10€, 20€, 
 export function PaymentScreen(): React.ReactElement {
   const order = useOrder();
   const navigateTo = useUiStore((s) => s.navigateTo);
+  const netTotalCents = useOrderStore(selectNetTotal);
+  const discountTotalCents = useOrderStore(selectDiscountTotal);
+  const appliedPromos = useOrderStore((s) => s.appliedPromos);
 
   // Saisie espèces
   const [cashInput, setCashInput] = useState('');
 
-  const totalCents = order.totalCents;
+  const totalCents = netTotalCents;
   const selectedMethod = order.selectedPaymentMethod;
 
   const cashAmountCents = cashInput
@@ -65,6 +68,18 @@ export function PaymentScreen(): React.ReactElement {
           <div className="bg-gray-800 rounded-2xl p-6 text-center">
             <p className="text-gray-400 text-sm mb-1">À encaisser</p>
             <p className="text-4xl font-bold text-white">{formatCents(totalCents)}</p>
+            {discountTotalCents > 0 && (
+              <div className="mt-3 space-y-1">
+                {appliedPromos.map((p) => (
+                  <p key={p.promo_id} className="text-green-400 text-sm">
+                    🏷️ {p.name} &minus;{formatCents(p.discount_cents)}
+                  </p>
+                ))}
+                <p className="text-gray-500 text-xs mt-1">
+                  Avant remise : {formatCents(order.totalCents)}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Sélection méthode */}

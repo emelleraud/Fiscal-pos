@@ -167,6 +167,14 @@ export const useOrderStore = create<OrderState>((set) => ({
 export const selectCartTotal = (state: OrderState): number =>
   state.cart.reduce((sum, item) => sum + item.totalCents, 0);
 
+/** Sélecteur : total des remises appliquées en centimes */
+export const selectDiscountTotal = (state: OrderState): number =>
+  state.appliedPromos.reduce((sum, p) => sum + p.discount_cents, 0);
+
+/** Sélecteur : montant net à encaisser (panier - remises) */
+export const selectNetTotal = (state: OrderState): number =>
+  Math.max(0, selectCartTotal(state) - selectDiscountTotal(state));
+
 /** Sélecteur : nombre total d'articles dans le panier */
 export const selectCartCount = (state: OrderState): number =>
   state.cart.reduce((sum, item) => sum + item.quantity, 0);
