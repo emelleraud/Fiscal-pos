@@ -43,7 +43,7 @@ use fiscal_engine::{
     },
     FiscalEntry,
 };
-use promo_engine::{Cart, CartItem, Promotion, PromoType, Trigger, TvaRateKey};
+use promo_engine::{Cart, CartItem, PromoType, Promotion, Trigger, TvaRateKey};
 
 // ---------------------------------------------------------------------------
 // DTOs de requête
@@ -273,32 +273,34 @@ impl TryFrom<SqlitePromoRow> for Promotion {
 
         let promo_type = match r.promo_type.as_str() {
             "fixed_amount" => PromoType::FixedAmount,
-            "percentage"   => PromoType::Percentage,
-            "item_discount"=> PromoType::ItemDiscount,
-            "bogo"         => PromoType::Bogo,
-            "happy_hour"   => PromoType::HappyHour,
-            _              => return Err(()),
+            "percentage" => PromoType::Percentage,
+            "item_discount" => PromoType::ItemDiscount,
+            "bogo" => PromoType::Bogo,
+            "happy_hour" => PromoType::HappyHour,
+            _ => return Err(()),
         };
 
         let trigger = match r.trigger_type.as_str() {
-            "auto"   => Trigger::Auto,
+            "auto" => Trigger::Auto,
             "manual" => Trigger::Manual,
-            _        => return Err(()),
+            _ => return Err(()),
         };
 
         // Analyser une date "YYYY-MM-DD" sans le feature `parsing` du crate `time`
         let parse_date = |s: &str| -> Option<time::Date> {
             let parts: Vec<&str> = s.splitn(3, '-').collect();
-            if parts.len() < 3 { return None; }
+            if parts.len() < 3 {
+                return None;
+            }
             let year: i32 = parts[0].parse().ok()?;
             let month: u8 = parts[1].parse().ok()?;
-            let day: u8   = parts[2].parse().ok()?;
+            let day: u8 = parts[2].parse().ok()?;
             let month = time::Month::try_from(month).ok()?;
             time::Date::from_calendar_date(year, month, day).ok()
         };
 
         let valid_from = r.valid_from.as_deref().and_then(parse_date);
-        let valid_to   = r.valid_to.as_deref().and_then(parse_date);
+        let valid_to = r.valid_to.as_deref().and_then(parse_date);
 
         // days_of_week est stocké en JSON : "[1,2,5]" ou NULL
         let days_of_week: Option<Vec<u8>> = r
@@ -309,14 +311,16 @@ impl TryFrom<SqlitePromoRow> for Promotion {
         // time_from / time_to : format "HH:MM"
         let parse_time = |s: &str| -> Option<time::Time> {
             let parts: Vec<&str> = s.splitn(2, ':').collect();
-            if parts.len() < 2 { return None; }
+            if parts.len() < 2 {
+                return None;
+            }
             let h: u8 = parts[0].parse().ok()?;
             let m: u8 = parts[1].parse().ok()?;
             time::Time::from_hms(h, m, 0).ok()
         };
 
         let time_from = r.time_from.as_deref().and_then(parse_time);
-        let time_to   = r.time_to.as_deref().and_then(parse_time);
+        let time_to = r.time_to.as_deref().and_then(parse_time);
 
         Ok(Promotion {
             id,
@@ -348,9 +352,9 @@ struct DiscountEntry {
 /// Convertit un `TvaRateRequest` vers le type `TvaRateKey` du promo-engine.
 fn tva_rate_request_to_key(r: TvaRateRequest) -> TvaRateKey {
     match r {
-        TvaRateRequest::Reduit5_5      => TvaRateKey::Reduit5_5,
-        TvaRateRequest::Intermediaire10=> TvaRateKey::Intermediaire10,
-        TvaRateRequest::Normal20       => TvaRateKey::Normal20,
+        TvaRateRequest::Reduit5_5 => TvaRateKey::Reduit5_5,
+        TvaRateRequest::Intermediaire10 => TvaRateKey::Intermediaire10,
+        TvaRateRequest::Normal20 => TvaRateKey::Normal20,
     }
 }
 
@@ -406,8 +410,8 @@ pub async fn create_order_handler(
 
     // Décomposition par taux
     let tva_5_5_breakdown = TvaBreakdown::from_ttc(Cents(ttc_5_5), TvaRate::Reduit5_5);
-    let tva_10_breakdown  = TvaBreakdown::from_ttc(Cents(ttc_10), TvaRate::Intermediaire10);
-    let tva_20_breakdown  = TvaBreakdown::from_ttc(Cents(ttc_20), TvaRate::Normal20);
+    let tva_10_breakdown = TvaBreakdown::from_ttc(Cents(ttc_10), TvaRate::Intermediaire10);
+    let tva_20_breakdown = TvaBreakdown::from_ttc(Cents(ttc_20), TvaRate::Normal20);
 
     // Taux dominant (par montant TTC)
     let dominant_rate = if ttc_20 >= ttc_10 && ttc_20 >= ttc_5_5 {
@@ -419,12 +423,10 @@ pub async fn create_order_handler(
     };
 
     // Décomposition principale : taux dominant + totaux agrégés
-    let total_ht = tva_5_5_breakdown.ht_cents.0
-        + tva_10_breakdown.ht_cents.0
-        + tva_20_breakdown.ht_cents.0;
-    let total_tva = tva_5_5_breakdown.tva_cents.0
-        + tva_10_breakdown.tva_cents.0
-        + tva_20_breakdown.tva_cents.0;
+    let total_ht =
+        tva_5_5_breakdown.ht_cents.0 + tva_10_breakdown.ht_cents.0 + tva_20_breakdown.ht_cents.0;
+    let total_tva =
+        tva_5_5_breakdown.tva_cents.0 + tva_10_breakdown.tva_cents.0 + tva_20_breakdown.tva_cents.0;
     let tva_breakdown = TvaBreakdown {
         rate: dominant_rate,
         ht_cents: Cents(total_ht),
@@ -457,9 +459,7 @@ pub async fn create_order_handler(
     )
     .fetch_all(&state.db)
     .await
-    .map_err(|e| {
-        FiscalError::Database(e)
-    })?;
+    .map_err(FiscalError::Database)?;
 
     // Convertir en lignes structurées puis en types promo-engine
     let promos: Vec<Promotion> = raw_rows
@@ -488,16 +488,21 @@ pub async fn create_order_handler(
 
     // Construire le panier pour le promo-engine
     let cart = Cart {
-        line_items: body.line_items.iter().map(|li| CartItem {
-            sku: li.sku.clone().unwrap_or_default(),
-            amount_ttc_cents: li.amount_ttc_cents,
-            tva_rate: tva_rate_request_to_key(li.tva_rate),
-        }).collect(),
+        line_items: body
+            .line_items
+            .iter()
+            .map(|li| CartItem {
+                sku: li.sku.clone().unwrap_or_default(),
+                amount_ttc_cents: li.amount_ttc_cents,
+                tva_rate: tva_rate_request_to_key(li.tva_rate),
+            })
+            .collect(),
         total_ttc_cents: total_ttc,
     };
 
     // Parser les IDs manuels fournis par le frontend
-    let manual_ids: Vec<Uuid> = body.manual_promo_ids
+    let manual_ids: Vec<Uuid> = body
+        .manual_promo_ids
         .iter()
         .filter_map(|s| s.parse().ok())
         .collect();
@@ -519,18 +524,19 @@ pub async fn create_order_handler(
 
         // Décomposition TVA de la remise par taux (proportionnelle au panier)
         let disc_5_5 = -app.tva_allocation.cents_5_5;
-        let disc_10  = -app.tva_allocation.cents_10;
-        let disc_20  = -app.tva_allocation.cents_20;
+        let disc_10 = -app.tva_allocation.cents_10;
+        let disc_20 = -app.tva_allocation.cents_20;
 
         let disc_bd_5_5 = TvaBreakdown::from_ttc(Cents(disc_5_5), TvaRate::Reduit5_5);
-        let disc_bd_10  = TvaBreakdown::from_ttc(Cents(disc_10),  TvaRate::Intermediaire10);
-        let disc_bd_20  = TvaBreakdown::from_ttc(Cents(disc_20),  TvaRate::Normal20);
+        let disc_bd_10 = TvaBreakdown::from_ttc(Cents(disc_10), TvaRate::Intermediaire10);
+        let disc_bd_20 = TvaBreakdown::from_ttc(Cents(disc_20), TvaRate::Normal20);
 
         // Fix 1: ttc_cents du breakdown principal = somme HT+TVA calculée,
         // pas discount_amount brut. Évite les échecs de validation par
         // arrondi entier (invariant : ht + tva == ttc doit toujours tenir).
-        let disc_total_ht  = disc_bd_5_5.ht_cents.0 + disc_bd_10.ht_cents.0 + disc_bd_20.ht_cents.0;
-        let disc_total_tva = disc_bd_5_5.tva_cents.0 + disc_bd_10.tva_cents.0 + disc_bd_20.tva_cents.0;
+        let disc_total_ht = disc_bd_5_5.ht_cents.0 + disc_bd_10.ht_cents.0 + disc_bd_20.ht_cents.0;
+        let disc_total_tva =
+            disc_bd_5_5.tva_cents.0 + disc_bd_10.tva_cents.0 + disc_bd_20.tva_cents.0;
 
         // Taux dominant de la remise
         let disc_dominant = if disc_20.abs() >= disc_10.abs() && disc_20.abs() >= disc_5_5.abs() {
@@ -564,12 +570,12 @@ pub async fn create_order_handler(
 
         // Fix 2: valider AVANT d'enregistrer la VENTE — échec ici n'a aucun
         // effet sur le journal (la vente n'est pas encore commitée).
-        disc_data.validate().map_err(|msg| {
-            FiscalError::InvalidAmount {
+        disc_data
+            .validate()
+            .map_err(|msg| FiscalError::InvalidAmount {
                 amount_cents: disc_data.amount_ttc_cents.0,
                 operation: format!("DISCOUNT pré-validation: {msg}"),
-            }
-        })?;
+            })?;
 
         pending_discounts.push(DiscountEntry {
             data: disc_data,
@@ -733,11 +739,11 @@ pub async fn cancel_order_handler(
         {
             // Multi-taux : utiliser les montants fournis (négatifs)
             let neg_5_5 = -body.tva_5_5_amount_ttc.unwrap_or(0);
-            let neg_10  = -body.tva_10_amount_ttc.unwrap_or(0);
-            let neg_20  = -body.tva_20_amount_ttc.unwrap_or(0);
+            let neg_10 = -body.tva_10_amount_ttc.unwrap_or(0);
+            let neg_20 = -body.tva_20_amount_ttc.unwrap_or(0);
             let bd_5_5 = TvaBreakdown::from_ttc(Cents(neg_5_5), TvaRate::Reduit5_5);
-            let bd_10  = TvaBreakdown::from_ttc(Cents(neg_10),  TvaRate::Intermediaire10);
-            let bd_20  = TvaBreakdown::from_ttc(Cents(neg_20),  TvaRate::Normal20);
+            let bd_10 = TvaBreakdown::from_ttc(Cents(neg_10), TvaRate::Intermediaire10);
+            let bd_20 = TvaBreakdown::from_ttc(Cents(neg_20), TvaRate::Normal20);
             let dominant = if neg_20.abs() >= neg_10.abs() && neg_20.abs() >= neg_5_5.abs() {
                 TvaRate::Normal20
             } else if neg_10.abs() >= neg_5_5.abs() {
@@ -829,9 +835,7 @@ pub async fn get_order_handler(
 // ---------------------------------------------------------------------------
 
 /// Récupère l'ID de la session active ou retourne une erreur 409.
-async fn require_active_session(
-    state: &AppState,
-) -> Result<common::SessionId, ApiErr> {
+async fn require_active_session(state: &AppState) -> Result<common::SessionId, ApiErr> {
     state
         .journal
         .active_session()
