@@ -55,11 +55,15 @@ pub async fn health_handler(State(state): State<AppState>) -> (StatusCode, Json<
         .await
         .is_ok();
 
-    let active_session = state.journal.active_session().await.map(|s| ActiveSessionInfo {
-        session_id: s.id.to_string(),
-        session_sequence: s.sequence_number,
-        entry_count: s.entry_count,
-    });
+    let active_session = state
+        .journal
+        .active_session()
+        .await
+        .map(|s| ActiveSessionInfo {
+            session_id: s.id.to_string(),
+            session_sequence: s.sequence_number,
+            entry_count: s.entry_count,
+        });
 
     if db_ok {
         (

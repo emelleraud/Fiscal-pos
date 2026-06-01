@@ -56,11 +56,8 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::{
-    client::SupabaseClient,
-    config::SyncConfig,
-    config_puller::pull_and_apply_config,
-    error::SyncError,
-    promo_puller::pull_promotions,
+    client::SupabaseClient, config::SyncConfig, config_puller::pull_and_apply_config,
+    error::SyncError, promo_puller::pull_promotions,
 };
 use fiscal_engine::journal::store::JournalStore;
 
@@ -100,9 +97,7 @@ pub async fn run_sync_cycle(
     let unsynced_sessions = store.load_unsynced_sessions().await?;
 
     if !unsynced_sessions.is_empty() {
-        let session_ids: Vec<Uuid> = unsynced_sessions.iter()
-            .map(|s| s.id.0)
-            .collect();
+        let session_ids: Vec<Uuid> = unsynced_sessions.iter().map(|s| s.id.0).collect();
 
         let session_payloads: Vec<crate::serializer::SessionPayload> = unsynced_sessions
             .iter()
@@ -122,7 +117,11 @@ pub async fn run_sync_cycle(
             Err(e) => {
                 error!(error = %e, "Sessions échouées — cycle interrompu");
                 metrics.batches_failed += 1;
-                metrics.duration_ms = cycle_start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+                metrics.duration_ms = cycle_start
+                    .elapsed()
+                    .as_millis()
+                    .try_into()
+                    .unwrap_or(u64::MAX);
                 return Ok(metrics);
             }
         }
@@ -132,9 +131,7 @@ pub async fn run_sync_cycle(
     let unsynced_z_reports = store.load_unsynced_z_reports().await?;
 
     if !unsynced_z_reports.is_empty() {
-        let z_report_ids: Vec<uuid::Uuid> = unsynced_z_reports.iter()
-            .map(|r| r.id)
-            .collect();
+        let z_report_ids: Vec<uuid::Uuid> = unsynced_z_reports.iter().map(|r| r.id).collect();
 
         let z_report_payloads: Vec<crate::serializer::ZReportPayload> = unsynced_z_reports
             .iter()
@@ -154,7 +151,11 @@ pub async fn run_sync_cycle(
             Err(e) => {
                 error!(error = %e, "Rapports Z échoués — cycle interrompu");
                 metrics.batches_failed += 1;
-                metrics.duration_ms = cycle_start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+                metrics.duration_ms = cycle_start
+                    .elapsed()
+                    .as_millis()
+                    .try_into()
+                    .unwrap_or(u64::MAX);
                 return Ok(metrics);
             }
         }
@@ -226,16 +227,20 @@ pub async fn run_sync_cycle(
         debug!("Promotions vérifiées depuis Supabase");
     }
 
-    metrics.duration_ms = cycle_start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    metrics.duration_ms = cycle_start
+        .elapsed()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX);
 
     info!(
-        sessions_pushed  = metrics.sessions_pushed,
+        sessions_pushed = metrics.sessions_pushed,
         z_reports_pushed = metrics.z_reports_pushed,
-        entries_pushed   = metrics.entries_pushed,
-        batches_pushed   = metrics.batches_pushed,
-        batches_failed   = metrics.batches_failed,
-        duration_ms      = metrics.duration_ms,
-        config_updated   = metrics.config_updated,
+        entries_pushed = metrics.entries_pushed,
+        batches_pushed = metrics.batches_pushed,
+        batches_failed = metrics.batches_failed,
+        duration_ms = metrics.duration_ms,
+        config_updated = metrics.config_updated,
         "Cycle de synchronisation terminé"
     );
 
@@ -440,15 +445,20 @@ mod tests {
 
     #[test]
     fn build_payloads_propagates_site_id() {
+        use common::GENESIS_HASH;
         use fiscal_engine::{
             hash_engine::build_entry_for_test,
             types::{operation::OperationType, tva::TvaRate},
         };
-        use common::GENESIS_HASH;
 
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 0, GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            GENESIS_HASH,
         );
         let payloads = build_payloads(&[entry], "MON-SITE");
         assert_eq!(payloads[0].site_id, "MON-SITE");

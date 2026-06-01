@@ -34,14 +34,12 @@ pub static X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 ///
 /// Si le client envoie déjà un `x-request-id`, il est conservé (tracing distribué).
 /// Sinon, un UUID v4 est généré.
-pub async fn request_id_middleware(
-    mut req: Request<Body>,
-    next: Next,
-) -> Response {
+pub async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Response {
     let request_id = req
         .headers()
         .get(&X_REQUEST_ID)
-        .and_then(|v| v.to_str().ok()).map_or_else(|| Uuid::now_v7().to_string(), ToString::to_string);
+        .and_then(|v| v.to_str().ok())
+        .map_or_else(|| Uuid::now_v7().to_string(), ToString::to_string);
 
     // Injecter dans les extensions pour que les handlers puissent le lire
     req.extensions_mut().insert(RequestId(request_id.clone()));

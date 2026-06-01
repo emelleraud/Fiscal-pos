@@ -19,7 +19,7 @@
 //! Les deux opérations sont délibérément séparées pour respecter le principe
 //! de responsabilité unique : la clôture est dans `journal`, l'agrégation ici.
 
-use sqlx::{Row, sqlite::SqlitePool};
+use sqlx::{sqlite::SqlitePool, Row};
 use uuid::Uuid;
 
 use crate::{
@@ -84,13 +84,12 @@ pub async fn generate_z_report(
     let session_id_str = session_id.0.to_string();
 
     // 1. Charger la session et vérifier son statut
-    let session_row = sqlx::query(
-        "SELECT id, sequence_number, status, closing_hash FROM sessions WHERE id = ?",
-    )
-    .bind(&session_id_str)
-    .fetch_optional(pool)
-    .await?
-    .ok_or(SessionError::NoActiveSession)?;
+    let session_row =
+        sqlx::query("SELECT id, sequence_number, status, closing_hash FROM sessions WHERE id = ?")
+            .bind(&session_id_str)
+            .fetch_optional(pool)
+            .await?
+            .ok_or(SessionError::NoActiveSession)?;
 
     let status_str: String = session_row.try_get("status")?;
     if status_str != "Closed" {
@@ -339,7 +338,9 @@ async fn persist_z_report(pool: &SqlitePool, report: &ZReport) -> Result<(), Fis
 fn z_report_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<ZReport, FiscalError> {
     let id_str: String = row.try_get("id")?;
     let id = Uuid::parse_str(&id_str).map_err(|e| {
-        FiscalError::Database(sqlx::Error::Protocol(format!("UUID z_report invalide: {e}")))
+        FiscalError::Database(sqlx::Error::Protocol(format!(
+            "UUID z_report invalide: {e}"
+        )))
     })?;
 
     let session_id_str: String = row.try_get("session_id")?;
@@ -354,30 +355,45 @@ fn z_report_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<ZReport, FiscalErr
     Ok(ZReport {
         id,
         session_id: SessionId(session_uuid),
-        session_sequence_number: { let n: i64 = row.try_get("session_sequence_number")?; n.cast_unsigned() },
-        generated_at_ms: { let t: i64 = row.try_get("generated_at_ms")?; t.cast_unsigned() },
-        first_entry_sequence: { let n: i64 = row.try_get("first_entry_sequence")?; n.cast_unsigned() },
-        last_entry_sequence: { let n: i64 = row.try_get("last_entry_sequence")?; n.cast_unsigned() },
-        entry_count: { let n: i64 = row.try_get("entry_count")?; n.cast_unsigned() },
-        total_sales_cents:    Cents(row.try_get("total_sales_cents")?),
-        total_refunds_cents:  Cents(row.try_get("total_refunds_cents")?),
-        total_cancels_cents:  Cents(row.try_get("total_cancels_cents")?),
+        session_sequence_number: {
+            let n: i64 = row.try_get("session_sequence_number")?;
+            n.cast_unsigned()
+        },
+        generated_at_ms: {
+            let t: i64 = row.try_get("generated_at_ms")?;
+            t.cast_unsigned()
+        },
+        first_entry_sequence: {
+            let n: i64 = row.try_get("first_entry_sequence")?;
+            n.cast_unsigned()
+        },
+        last_entry_sequence: {
+            let n: i64 = row.try_get("last_entry_sequence")?;
+            n.cast_unsigned()
+        },
+        entry_count: {
+            let n: i64 = row.try_get("entry_count")?;
+            n.cast_unsigned()
+        },
+        total_sales_cents: Cents(row.try_get("total_sales_cents")?),
+        total_refunds_cents: Cents(row.try_get("total_refunds_cents")?),
+        total_cancels_cents: Cents(row.try_get("total_cancels_cents")?),
         total_discounts_cents: Cents(row.try_get("total_discounts_cents")?),
         tva_5_5_breakdown: TvaBreakdown {
             rate: TvaRate::Reduit5_5,
-            ht_cents:  Cents(row.try_get("tva_5_5_ht_cents")?),
+            ht_cents: Cents(row.try_get("tva_5_5_ht_cents")?),
             tva_cents: Cents(row.try_get("tva_5_5_tva_cents")?),
             ttc_cents: Cents(row.try_get("tva_5_5_ttc_cents")?),
         },
         tva_10_breakdown: TvaBreakdown {
             rate: TvaRate::Intermediaire10,
-            ht_cents:  Cents(row.try_get("tva_10_ht_cents")?),
+            ht_cents: Cents(row.try_get("tva_10_ht_cents")?),
             tva_cents: Cents(row.try_get("tva_10_tva_cents")?),
             ttc_cents: Cents(row.try_get("tva_10_ttc_cents")?),
         },
         tva_20_breakdown: TvaBreakdown {
             rate: TvaRate::Normal20,
-            ht_cents:  Cents(row.try_get("tva_20_ht_cents")?),
+            ht_cents: Cents(row.try_get("tva_20_ht_cents")?),
             tva_cents: Cents(row.try_get("tva_20_tva_cents")?),
             ttc_cents: Cents(row.try_get("tva_20_ttc_cents")?),
         },
@@ -397,10 +413,11 @@ async fn load_session_entries(
     // On instancie un store temporaire pour réutiliser la désérialisation existante
     // plutôt que de dupliquer la logique entry_from_row
     let store = JournalStore { pool: pool.clone() };
-    let session_uuid = Uuid::parse_str(session_id_str).map_err(|e| {
-        FiscalError::Database(sqlx::Error::Protocol(format!("UUID invalide: {e}")))
-    })?;
-    store.load_entries_for_session(SessionId(session_uuid)).await
+    let session_uuid = Uuid::parse_str(session_id_str)
+        .map_err(|e| FiscalError::Database(sqlx::Error::Protocol(format!("UUID invalide: {e}"))))?;
+    store
+        .load_entries_for_session(SessionId(session_uuid))
+        .await
 }
 
 fn now_ms() -> u64 {
@@ -529,7 +546,7 @@ HASH CLOTURE    : {hash_display}...
 mod tests {
     use super::*;
     use crate::{
-        journal::{Journal, store::JournalStore},
+        journal::{store::JournalStore, Journal},
         types::{
             entry::FiscalEntryData,
             operation::OperationType,
@@ -547,15 +564,25 @@ mod tests {
 
         // Appliquer les deux migrations
         sqlx::query(include_str!("../../migrations/0001_initial_schema.sql"))
-            .execute(&pool).await.expect("Migration 0001");
+            .execute(&pool)
+            .await
+            .expect("Migration 0001");
         sqlx::query(include_str!("../../migrations/0002_z_reports_archives.sql"))
-            .execute(&pool).await.expect("Migration 0002");
+            .execute(&pool)
+            .await
+            .expect("Migration 0002");
         sqlx::query(include_str!("../../migrations/0003_sessions_sync.sql"))
-            .execute(&pool).await.expect("Migration 0003");
+            .execute(&pool)
+            .await
+            .expect("Migration 0003");
         sqlx::query(include_str!("../../migrations/0004_z_reports_sync.sql"))
-            .execute(&pool).await.expect("Migration 0004");
+            .execute(&pool)
+            .await
+            .expect("Migration 0004");
         sqlx::query(include_str!("../../migrations/0005_multi_tva.sql"))
-            .execute(&pool).await.expect("Migration 0005");
+            .execute(&pool)
+            .await
+            .expect("Migration 0005");
 
         pool
     }
@@ -603,9 +630,18 @@ mod tests {
         let (journal, pool) = make_journal_with_pool(pool).await;
 
         let session = journal.open_session().await.expect("Session");
-        journal.record_transaction(sale(session.id, 1100)).await.expect("Vente 1");
-        journal.record_transaction(sale(session.id, 550)).await.expect("Vente 2");
-        journal.record_transaction(refund(session.id, -500)).await.expect("Remboursement");
+        journal
+            .record_transaction(sale(session.id, 1100))
+            .await
+            .expect("Vente 1");
+        journal
+            .record_transaction(sale(session.id, 550))
+            .await
+            .expect("Vente 2");
+        journal
+            .record_transaction(refund(session.id, -500))
+            .await
+            .expect("Remboursement");
         journal.close_session().await.expect("Clôture");
 
         let report = generate_z_report(&pool, session.id)
@@ -630,10 +666,15 @@ mod tests {
         let (journal, pool) = make_journal_with_pool(pool).await;
 
         let session = journal.open_session().await.expect("Session");
-        journal.record_transaction(sale(session.id, 1000)).await.expect("Vente");
+        journal
+            .record_transaction(sale(session.id, 1000))
+            .await
+            .expect("Vente");
         journal.close_session().await.expect("Clôture");
 
-        generate_z_report(&pool, session.id).await.expect("Première génération");
+        generate_z_report(&pool, session.id)
+            .await
+            .expect("Première génération");
 
         let result = generate_z_report(&pool, session.id).await;
         assert!(result.is_err());
@@ -653,34 +694,42 @@ mod tests {
         let session = journal.open_session().await.expect("Session");
 
         // Vente à 10% : 11,00 €
-        journal.record_transaction(FiscalEntryData {
-            session_id: session.id,
-            operation_type: OperationType::Sale,
-            amount_ttc_cents: Cents(1100),
-            tva_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
-            tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
-            tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
-            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
-            reason: None,
-            order_reference: None,
-        }).await.expect("Vente 10%");
+        journal
+            .record_transaction(FiscalEntryData {
+                session_id: session.id,
+                operation_type: OperationType::Sale,
+                amount_ttc_cents: Cents(1100),
+                tva_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+                tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+                tva_10_breakdown: TvaBreakdown::from_ttc(Cents(1100), TvaRate::Intermediaire10),
+                tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
+                reason: None,
+                order_reference: None,
+            })
+            .await
+            .expect("Vente 10%");
 
         // Vente à 5,5% : 10,55 €
-        journal.record_transaction(FiscalEntryData {
-            session_id: session.id,
-            operation_type: OperationType::Sale,
-            amount_ttc_cents: Cents(1055),
-            tva_breakdown: TvaBreakdown::from_ttc(Cents(1055), TvaRate::Reduit5_5),
-            tva_5_5_breakdown: TvaBreakdown::from_ttc(Cents(1055), TvaRate::Reduit5_5),
-            tva_10_breakdown: TvaBreakdown::zero(TvaRate::Intermediaire10),
-            tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
-            reason: None,
-            order_reference: None,
-        }).await.expect("Vente 5.5%");
+        journal
+            .record_transaction(FiscalEntryData {
+                session_id: session.id,
+                operation_type: OperationType::Sale,
+                amount_ttc_cents: Cents(1055),
+                tva_breakdown: TvaBreakdown::from_ttc(Cents(1055), TvaRate::Reduit5_5),
+                tva_5_5_breakdown: TvaBreakdown::from_ttc(Cents(1055), TvaRate::Reduit5_5),
+                tva_10_breakdown: TvaBreakdown::zero(TvaRate::Intermediaire10),
+                tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
+                reason: None,
+                order_reference: None,
+            })
+            .await
+            .expect("Vente 5.5%");
 
         journal.close_session().await.expect("Clôture");
 
-        let report = generate_z_report(&pool, session.id).await.expect("Rapport Z");
+        let report = generate_z_report(&pool, session.id)
+            .await
+            .expect("Rapport Z");
 
         // TVA 10% doit contenir les données de la première vente
         assert_eq!(report.tva_10_breakdown.ttc_cents, Cents(1100));
@@ -699,12 +748,16 @@ mod tests {
 
         let session = journal.open_session().await.expect("Session");
         for i in 1..=5_u64 {
-            journal.record_transaction(sale(session.id, (i * 110) as i64))
-                .await.expect("Vente");
+            journal
+                .record_transaction(sale(session.id, (i * 110) as i64))
+                .await
+                .expect("Vente");
         }
         journal.close_session().await.expect("Clôture");
 
-        let report = generate_z_report(&pool, session.id).await.expect("Rapport Z");
+        let report = generate_z_report(&pool, session.id)
+            .await
+            .expect("Rapport Z");
         assert!(report.verify_internal_consistency().is_ok());
     }
 
@@ -716,11 +769,17 @@ mod tests {
         let (journal, pool) = make_journal_with_pool(pool).await;
 
         let session = journal.open_session().await.expect("Session");
-        journal.record_transaction(sale(session.id, 2000)).await.expect("Vente");
+        journal
+            .record_transaction(sale(session.id, 2000))
+            .await
+            .expect("Vente");
         journal.close_session().await.expect("Clôture");
 
         let generated = generate_z_report(&pool, session.id).await.expect("Généré");
-        let loaded = load_z_report(&pool, session.id).await.expect("Chargement").expect("Existe");
+        let loaded = load_z_report(&pool, session.id)
+            .await
+            .expect("Chargement")
+            .expect("Existe");
 
         assert_eq!(generated.id, loaded.id);
         assert_eq!(generated.total_sales_cents, loaded.total_sales_cents);
@@ -735,15 +794,29 @@ mod tests {
         let (journal, pool) = make_journal_with_pool(pool).await;
 
         let session = journal.open_session().await.expect("Session");
-        journal.record_transaction(sale(session.id, 10_000)).await.expect("Vente");
+        journal
+            .record_transaction(sale(session.id, 10_000))
+            .await
+            .expect("Vente");
         journal.close_session().await.expect("Clôture");
 
-        let report = generate_z_report(&pool, session.id).await.expect("Rapport Z");
+        let report = generate_z_report(&pool, session.id)
+            .await
+            .expect("Rapport Z");
         let text = format_z_report_text(&report);
 
-        assert!(text.contains("RAPPORT Z"), "Le texte doit contenir 'RAPPORT Z'");
-        assert!(text.contains("100.00"), "Le montant 100,00 € doit apparaître");
-        assert!(text.contains("HASH CLOTURE"), "Le hash de clôture doit apparaître");
+        assert!(
+            text.contains("RAPPORT Z"),
+            "Le texte doit contenir 'RAPPORT Z'"
+        );
+        assert!(
+            text.contains("100.00"),
+            "Le montant 100,00 € doit apparaître"
+        );
+        assert!(
+            text.contains("HASH CLOTURE"),
+            "Le hash de clôture doit apparaître"
+        );
     }
 
     // --- Agrégation unitaire (sans base) ---
@@ -752,10 +825,24 @@ mod tests {
     fn aggregate_entries_only_sales() {
         use crate::hash_engine::build_entry_for_test;
         let session_bytes = [0xAB; 16];
-        let e1 = build_entry_for_test(1, session_bytes, OperationType::Sale,
-            1100, TvaRate::Intermediaire10, 0, common::GENESIS_HASH);
-        let e2 = build_entry_for_test(2, session_bytes, OperationType::Sale,
-            550, TvaRate::Reduit5_5, 1000, e1.hash);
+        let e1 = build_entry_for_test(
+            1,
+            session_bytes,
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
+        );
+        let e2 = build_entry_for_test(
+            2,
+            session_bytes,
+            OperationType::Sale,
+            550,
+            TvaRate::Reduit5_5,
+            1000,
+            e1.hash,
+        );
         let entries = vec![e1, e2];
         let agg = aggregate_entries(&entries);
         assert_eq!(agg.total_sales, Cents(1650));
@@ -768,10 +855,24 @@ mod tests {
     fn aggregate_entries_with_refund() {
         use crate::hash_engine::build_entry_for_test;
         let session_bytes = [0xAB; 16];
-        let e1 = build_entry_for_test(1, session_bytes, OperationType::Sale,
-            2000, TvaRate::Intermediaire10, 0, common::GENESIS_HASH);
-        let e2 = build_entry_for_test(2, session_bytes, OperationType::Refund,
-            -500, TvaRate::Intermediaire10, 1000, e1.hash);
+        let e1 = build_entry_for_test(
+            1,
+            session_bytes,
+            OperationType::Sale,
+            2000,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
+        );
+        let e2 = build_entry_for_test(
+            2,
+            session_bytes,
+            OperationType::Refund,
+            -500,
+            TvaRate::Intermediaire10,
+            1000,
+            e1.hash,
+        );
         let entries = vec![e1, e2];
         let agg = aggregate_entries(&entries);
         assert_eq!(agg.total_sales, Cents(2000));

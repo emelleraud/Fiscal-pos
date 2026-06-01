@@ -82,11 +82,9 @@ impl JournalStore {
     /// Retourne `FiscalError::Database` si une migration échoue.
     pub async fn run_migrations(&self) -> Result<(), FiscalError> {
         // Table de suivi des migrations — créée une seule fois, jamais supprimée.
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS _applied_migrations (version TEXT PRIMARY KEY)",
-        )
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS _applied_migrations (version TEXT PRIMARY KEY)")
+            .execute(&self.pool)
+            .await?;
 
         // Bootstrapping : les DBs créées avant l'introduction du suivi de migrations
         // ont déjà 0001/0002/0003 appliquées. On les marque comme déjà faites si la
@@ -116,10 +114,9 @@ impl JournalStore {
         }
 
         // Charger les versions déjà appliquées
-        let applied: Vec<String> =
-            sqlx::query_scalar("SELECT version FROM _applied_migrations")
-                .fetch_all(&self.pool)
-                .await?;
+        let applied: Vec<String> = sqlx::query_scalar("SELECT version FROM _applied_migrations")
+            .fetch_all(&self.pool)
+            .await?;
 
         let run = |version: &'static str, sql: &'static str| {
             let applied = &applied;
@@ -136,10 +133,26 @@ impl JournalStore {
             }
         };
 
-        run("0001", include_str!("../../migrations/0001_initial_schema.sql")).await?;
-        run("0002", include_str!("../../migrations/0002_z_reports_archives.sql")).await?;
-        run("0003", include_str!("../../migrations/0003_sessions_sync.sql")).await?;
-        run("0004", include_str!("../../migrations/0004_z_reports_sync.sql")).await?;
+        run(
+            "0001",
+            include_str!("../../migrations/0001_initial_schema.sql"),
+        )
+        .await?;
+        run(
+            "0002",
+            include_str!("../../migrations/0002_z_reports_archives.sql"),
+        )
+        .await?;
+        run(
+            "0003",
+            include_str!("../../migrations/0003_sessions_sync.sql"),
+        )
+        .await?;
+        run(
+            "0004",
+            include_str!("../../migrations/0004_z_reports_sync.sql"),
+        )
+        .await?;
         run("0005", include_str!("../../migrations/0005_multi_tva.sql")).await?;
         run("0006", include_str!("../../migrations/0006_promotions.sql")).await?;
 
@@ -228,7 +241,12 @@ impl JournalStore {
         .bind(session_status_to_str(session.status))
         .bind(session.opened_at_ms.cast_signed())
         .bind(session.closed_at_ms.map(u64::cast_signed))
-        .bind(session.closing_hash.as_ref().map(std::convert::AsRef::as_ref))
+        .bind(
+            session
+                .closing_hash
+                .as_ref()
+                .map(std::convert::AsRef::as_ref),
+        )
         .bind(session.total_sales_cents.0)
         .bind(session.total_refunds_cents.0)
         .bind(session.total_cancels_cents.0)
@@ -293,7 +311,12 @@ impl JournalStore {
              WHERE id = ?",
         )
         .bind(session.closed_at_ms.map(u64::cast_signed))
-        .bind(session.closing_hash.as_ref().map(std::convert::AsRef::as_ref))
+        .bind(
+            session
+                .closing_hash
+                .as_ref()
+                .map(std::convert::AsRef::as_ref),
+        )
         .bind(session.total_sales_cents.0)
         .bind(session.total_refunds_cents.0)
         .bind(session.total_cancels_cents.0)
@@ -331,11 +354,10 @@ impl JournalStore {
     /// # Errors
     /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn last_hash(&self) -> Result<[u8; 32], FiscalError> {
-        let row = sqlx::query(
-            "SELECT hash FROM fiscal_entries ORDER BY sequence_number DESC LIMIT 1",
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let row =
+            sqlx::query("SELECT hash FROM fiscal_entries ORDER BY sequence_number DESC LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await?;
 
         match row {
             None => Ok(common::GENESIS_HASH),
@@ -413,10 +435,7 @@ impl JournalStore {
     ///
     /// # Errors
     /// `FiscalError::Database` sur erreur `SQLite`.
-    pub async fn load_unsynced_entries(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<FiscalEntry>, FiscalError> {
+    pub async fn load_unsynced_entries(&self, limit: u32) -> Result<Vec<FiscalEntry>, FiscalError> {
         let rows = sqlx::query(
             "SELECT id, sequence_number, session_id, operation_type,
                     amount_ttc_cents, ht_cents, tva_cents, tva_rate,
@@ -445,10 +464,7 @@ impl JournalStore {
     ///
     /// # Errors
     /// `FiscalError::Database` sur erreur `SQLite`.
-    pub async fn load_entries_for_year(
-        &self,
-        year: u32,
-    ) -> Result<Vec<FiscalEntry>, FiscalError> {
+    pub async fn load_entries_for_year(&self, year: u32) -> Result<Vec<FiscalEntry>, FiscalError> {
         // Bornes Unix ms pour l'année civile (UTC)
         let start_ms = year_start_ms(year);
         let end_ms = year_start_ms(year + 1);
@@ -564,7 +580,7 @@ impl JournalStore {
     }
 
     //AMV : ajouté le 11/05/26 2205 *******************
-// -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     // Sessions — synchronisation (utilisé exclusivement par sync-client)
     // -----------------------------------------------------------------------
 
@@ -620,9 +636,8 @@ impl JournalStore {
             .map(|(i, _)| if i == 0 { "?" } else { ", ?" })
             .collect::<String>();
 
-        let sql = format!(
-            "UPDATE sessions SET synced = 1, synced_at = ? WHERE id IN ({placeholders})"
-        );
+        let sql =
+            format!("UPDATE sessions SET synced = 1, synced_at = ? WHERE id IN ({placeholders})");
 
         let mut query = sqlx::query(&sql).bind(now_ms);
         for id in session_ids {
@@ -690,9 +705,8 @@ impl JournalStore {
             .map(|(i, _)| if i == 0 { "?" } else { ", ?" })
             .collect::<String>();
 
-        let sql = format!(
-            "UPDATE z_reports SET synced = 1, synced_at = ? WHERE id IN ({placeholders})"
-        );
+        let sql =
+            format!("UPDATE z_reports SET synced = 1, synced_at = ? WHERE id IN ({placeholders})");
 
         let mut query = sqlx::query(&sql).bind(now_ms);
         for id in report_ids {
@@ -797,7 +811,9 @@ fn str_to_session_status(s: &str) -> Result<SessionStatus, FiscalError> {
 fn session_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Session, FiscalError> {
     let id_str: String = row.try_get("id")?;
     let id = Uuid::parse_str(&id_str).map_err(|e| {
-        FiscalError::Database(sqlx::Error::Protocol(format!("UUID session invalide : {e}")))
+        FiscalError::Database(sqlx::Error::Protocol(format!(
+            "UUID session invalide : {e}"
+        )))
     })?;
 
     let status_str: String = row.try_get("status")?;
@@ -846,7 +862,9 @@ fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalEr
 
     let session_id_str: String = row.try_get("session_id")?;
     let session_id = Uuid::parse_str(&session_id_str).map_err(|e| {
-        FiscalError::Database(sqlx::Error::Protocol(format!("UUID session invalide : {e}")))
+        FiscalError::Database(sqlx::Error::Protocol(format!(
+            "UUID session invalide : {e}"
+        )))
     })?;
 
     let op_str: String = row.try_get("operation_type")?;
@@ -931,7 +949,9 @@ fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalEr
 fn z_report_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<ZReport, FiscalError> {
     let id_str: String = row.try_get("id")?;
     let id = Uuid::parse_str(&id_str).map_err(|e| {
-        FiscalError::Database(sqlx::Error::Protocol(format!("UUID z_report invalide: {e}")))
+        FiscalError::Database(sqlx::Error::Protocol(format!(
+            "UUID z_report invalide: {e}"
+        )))
     })?;
 
     let session_id_str: String = row.try_get("session_id")?;
@@ -946,30 +966,45 @@ fn z_report_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<ZReport, FiscalErr
     Ok(ZReport {
         id,
         session_id: SessionId(session_uuid),
-        session_sequence_number: { let n: i64 = row.try_get("session_sequence_number")?; n.cast_unsigned() },
-        generated_at_ms: { let t: i64 = row.try_get("generated_at_ms")?; t.cast_unsigned() },
-        first_entry_sequence: { let n: i64 = row.try_get("first_entry_sequence")?; n.cast_unsigned() },
-        last_entry_sequence:  { let n: i64 = row.try_get("last_entry_sequence")?;  n.cast_unsigned() },
-        entry_count:          { let n: i64 = row.try_get("entry_count")?;          n.cast_unsigned() },
-        total_sales_cents:    Cents(row.try_get("total_sales_cents")?),
-        total_refunds_cents:  Cents(row.try_get("total_refunds_cents")?),
-        total_cancels_cents:  Cents(row.try_get("total_cancels_cents")?),
+        session_sequence_number: {
+            let n: i64 = row.try_get("session_sequence_number")?;
+            n.cast_unsigned()
+        },
+        generated_at_ms: {
+            let t: i64 = row.try_get("generated_at_ms")?;
+            t.cast_unsigned()
+        },
+        first_entry_sequence: {
+            let n: i64 = row.try_get("first_entry_sequence")?;
+            n.cast_unsigned()
+        },
+        last_entry_sequence: {
+            let n: i64 = row.try_get("last_entry_sequence")?;
+            n.cast_unsigned()
+        },
+        entry_count: {
+            let n: i64 = row.try_get("entry_count")?;
+            n.cast_unsigned()
+        },
+        total_sales_cents: Cents(row.try_get("total_sales_cents")?),
+        total_refunds_cents: Cents(row.try_get("total_refunds_cents")?),
+        total_cancels_cents: Cents(row.try_get("total_cancels_cents")?),
         total_discounts_cents: Cents(row.try_get("total_discounts_cents")?),
         tva_5_5_breakdown: TvaBreakdown {
             rate: TvaRate::Reduit5_5,
-            ht_cents:  Cents(row.try_get("tva_5_5_ht_cents")?),
+            ht_cents: Cents(row.try_get("tva_5_5_ht_cents")?),
             tva_cents: Cents(row.try_get("tva_5_5_tva_cents")?),
             ttc_cents: Cents(row.try_get("tva_5_5_ttc_cents")?),
         },
         tva_10_breakdown: TvaBreakdown {
             rate: TvaRate::Intermediaire10,
-            ht_cents:  Cents(row.try_get("tva_10_ht_cents")?),
+            ht_cents: Cents(row.try_get("tva_10_ht_cents")?),
             tva_cents: Cents(row.try_get("tva_10_tva_cents")?),
             ttc_cents: Cents(row.try_get("tva_10_ttc_cents")?),
         },
         tva_20_breakdown: TvaBreakdown {
             rate: TvaRate::Normal20,
-            ht_cents:  Cents(row.try_get("tva_20_ht_cents")?),
+            ht_cents: Cents(row.try_get("tva_20_ht_cents")?),
             tva_cents: Cents(row.try_get("tva_20_tva_cents")?),
             ttc_cents: Cents(row.try_get("tva_20_ttc_cents")?),
         },
@@ -1010,9 +1045,7 @@ mod tests {
             .connect("sqlite::memory:")
             .await
             .expect("Pool SQLite en mémoire");
-        let store = JournalStore::new(pool)
-            .await
-            .expect("Store initialisé");
+        let store = JournalStore::new(pool).await.expect("Store initialisé");
         // Appliquer le schéma manuellement (migrate!() ne fonctionne pas en tests sans fichiers)
         sqlx::query(include_str!("../../migrations/0001_initial_schema.sql"))
             .execute(&store.pool)
@@ -1047,7 +1080,10 @@ mod tests {
     async fn insert_and_load_session() {
         let store = setup_store().await;
         let session = make_session(1);
-        store.insert_session(&session).await.expect("INSERT session");
+        store
+            .insert_session(&session)
+            .await
+            .expect("INSERT session");
 
         let loaded = store
             .load_active_session()
@@ -1103,7 +1139,10 @@ mod tests {
 
         // Session requise (FK)
         let session = make_session(1);
-        store.insert_session(&session).await.expect("INSERT session");
+        store
+            .insert_session(&session)
+            .await
+            .expect("INSERT session");
 
         let session_bytes = session.id.0.into_bytes();
         let entry = build_entry_for_test(
@@ -1117,7 +1156,10 @@ mod tests {
         );
 
         let mut tx = store.begin_transaction().await.expect("Transaction");
-        store.insert_entry(&entry, &mut tx).await.expect("INSERT entry");
+        store
+            .insert_entry(&entry, &mut tx)
+            .await
+            .expect("INSERT entry");
         tx.commit().await.expect("COMMIT");
 
         let loaded = store
@@ -1139,12 +1181,20 @@ mod tests {
 
         let store = setup_store().await;
         let session = make_session(1);
-        store.insert_session(&session).await.expect("INSERT session");
+        store
+            .insert_session(&session)
+            .await
+            .expect("INSERT session");
 
         let session_bytes = session.id.0.into_bytes();
         let entry = build_entry_for_test(
-            1, session_bytes, OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 1_700_000_000_000, GENESIS_HASH,
+            1,
+            session_bytes,
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            1_700_000_000_000,
+            GENESIS_HASH,
         );
         let mut tx = store.begin_transaction().await.expect("TX");
         store.insert_entry(&entry, &mut tx).await.expect("INSERT");
@@ -1162,12 +1212,20 @@ mod tests {
 
         let store = setup_store().await;
         let session = make_session(1);
-        store.insert_session(&session).await.expect("INSERT session");
+        store
+            .insert_session(&session)
+            .await
+            .expect("INSERT session");
 
         let session_bytes = session.id.0.into_bytes();
         let entry = build_entry_for_test(
-            1, session_bytes, OperationType::Sale, 500,
-            TvaRate::Intermediaire10, 1_700_000_000_000, GENESIS_HASH,
+            1,
+            session_bytes,
+            OperationType::Sale,
+            500,
+            TvaRate::Intermediaire10,
+            1_700_000_000_000,
+            GENESIS_HASH,
         );
         let mut tx = store.begin_transaction().await.expect("TX");
         store.insert_entry(&entry, &mut tx).await.expect("INSERT");
@@ -1185,7 +1243,10 @@ mod tests {
         assert_eq!(affected, 1);
 
         // Après sync
-        let unsynced = store.load_unsynced_entries(100).await.expect("Unsynced après");
+        let unsynced = store
+            .load_unsynced_entries(100)
+            .await
+            .expect("Unsynced après");
         assert_eq!(unsynced.len(), 0);
     }
 

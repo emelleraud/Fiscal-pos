@@ -20,10 +20,7 @@
 use tracing::{debug, info, warn};
 
 use crate::{
-    client::SupabaseClient,
-    config::SyncConfig,
-    error::SyncError,
-    serializer::RemoteConfig,
+    client::SupabaseClient, config::SyncConfig, error::SyncError, serializer::RemoteConfig,
 };
 
 /// Vérifie si une nouvelle configuration est disponible et l'applique.
@@ -38,7 +35,10 @@ pub async fn pull_and_apply_config(
     config: &SyncConfig,
 ) -> Result<bool, SyncError> {
     let Some(remote) = client.pull_config(&config.site_id).await? else {
-        debug!("Aucune configuration disponible pour le site {}", config.site_id);
+        debug!(
+            "Aucune configuration disponible pour le site {}",
+            config.site_id
+        );
         return Ok(false);
     };
 
@@ -72,8 +72,12 @@ pub async fn pull_and_apply_config(
 /// Retourne 0 si le fichier est absent ou invalide.
 fn read_local_version(data_dir: &str) -> u32 {
     let path = format!("{data_dir}/menu.json");
-    let Ok(content) = std::fs::read_to_string(&path) else { return 0 };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else { return 0 };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return 0;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return 0;
+    };
     value
         .get("version")
         .and_then(serde_json::Value::as_u64)
@@ -192,7 +196,10 @@ mod tests {
         apply_config(&remote, data_dir);
 
         let menu_path = format!("{data_dir}/menu.json");
-        assert!(Path::new(&menu_path).exists(), "menu.json doit exister après apply_config");
+        assert!(
+            Path::new(&menu_path).exists(),
+            "menu.json doit exister après apply_config"
+        );
 
         let content = fs::read_to_string(&menu_path).unwrap();
         let value: serde_json::Value = serde_json::from_str(&content).unwrap();

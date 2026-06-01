@@ -171,10 +171,7 @@ impl FiscalEntryData {
     /// ```
     pub fn validate(&self) -> Result<(), String> {
         // 1. Cohérence signe / operation_type
-        if !self
-            .operation_type
-            .is_amount_valid(self.amount_ttc_cents.0)
-        {
+        if !self.operation_type.is_amount_valid(self.amount_ttc_cents.0) {
             return Err(format!(
                 "Montant {} centimes invalide pour l'opération {}",
                 self.amount_ttc_cents.0,

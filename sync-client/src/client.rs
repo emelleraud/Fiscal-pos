@@ -124,7 +124,10 @@ impl SupabaseClient {
             .header("Authorization", format!("Bearer {}", self.service_key))
             .header("Content-Type", "application/json")
             // Idempotence : ignorer les doublons (clé primaire = id UUID)
-            .header("Prefer", "resolution=ignore-duplicates,return=representation")
+            .header(
+                "Prefer",
+                "resolution=ignore-duplicates,return=representation",
+            )
             .body(body)
             .send()
             .await?;
@@ -133,10 +136,8 @@ impl SupabaseClient {
 
         if status.is_success() {
             // Supabase retourne les lignes insérées avec return=representation
-            let inserted_rows: serde_json::Value = response
-                .json()
-                .await
-                .unwrap_or(serde_json::json!([]));
+            let inserted_rows: serde_json::Value =
+                response.json().await.unwrap_or(serde_json::json!([]));
             let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
             debug!(inserted = count, "Batch poussé avec succès");
             Ok(count)
@@ -152,7 +153,7 @@ impl SupabaseClient {
     }
 
     //AMV Ajouté le 11/05/26 2209 ******************************
-// -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     // Push des sessions
     // -----------------------------------------------------------------------
 
@@ -183,7 +184,10 @@ impl SupabaseClient {
             .header("apikey", &self.service_key)
             .header("Authorization", format!("Bearer {}", self.service_key))
             .header("Content-Type", "application/json")
-            .header("Prefer", "resolution=ignore-duplicates,return=representation")
+            .header(
+                "Prefer",
+                "resolution=ignore-duplicates,return=representation",
+            )
             .body(body)
             .send()
             .await?;
@@ -191,10 +195,8 @@ impl SupabaseClient {
         let status = response.status();
 
         if status.is_success() {
-            let inserted_rows: serde_json::Value = response
-                .json()
-                .await
-                .unwrap_or(serde_json::json!([]));
+            let inserted_rows: serde_json::Value =
+                response.json().await.unwrap_or(serde_json::json!([]));
             let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
             debug!(inserted = count, "Sessions poussées avec succès");
             Ok(count)
@@ -207,7 +209,7 @@ impl SupabaseClient {
                 body,
             })
         }
-    }    
+    }
 
     // -----------------------------------------------------------------------
     // Push des rapports Z
@@ -237,7 +239,10 @@ impl SupabaseClient {
             .header("apikey", &self.service_key)
             .header("Authorization", format!("Bearer {}", self.service_key))
             .header("Content-Type", "application/json")
-            .header("Prefer", "resolution=ignore-duplicates,return=representation")
+            .header(
+                "Prefer",
+                "resolution=ignore-duplicates,return=representation",
+            )
             .body(body)
             .send()
             .await?;
@@ -245,10 +250,8 @@ impl SupabaseClient {
         let status = response.status();
 
         if status.is_success() {
-            let inserted_rows: serde_json::Value = response
-                .json()
-                .await
-                .unwrap_or(serde_json::json!([]));
+            let inserted_rows: serde_json::Value =
+                response.json().await.unwrap_or(serde_json::json!([]));
             let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
             debug!(inserted = count, "Z-reports poussés avec succès");
             Ok(count)
@@ -385,20 +388,20 @@ impl SupabaseClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-    use wiremock::matchers::{method, path};
     use crate::serializer::SessionPayload;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn make_session_payload(id: &str, session_ref: &str) -> SessionPayload {
         SessionPayload {
-            id:             id.to_string(),
-            site_id:        "SITE-001".to_string(),
-            session_ref:    session_ref.to_string(),
-            opened_at:      "2024-01-01T10:00:00Z".to_string(),
-            closed_at:      None,
-            operator_id:    None,
+            id: id.to_string(),
+            site_id: "SITE-001".to_string(),
+            session_ref: session_ref.to_string(),
+            opened_at: "2024-01-01T10:00:00Z".to_string(),
+            closed_at: None,
+            operator_id: None,
             opening_amount: 0,
-            status:         "open".to_string(),
+            status: "open".to_string(),
         }
     }
 
@@ -426,8 +429,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/rest/v1/sessions"))
             .respond_with(
-                ResponseTemplate::new(201)
-                    .set_body_json(serde_json::json!([{"id": "uuid-1"}])),
+                ResponseTemplate::new(201).set_body_json(serde_json::json!([{"id": "uuid-1"}])),
             )
             .mount(&server)
             .await;
@@ -461,6 +463,9 @@ mod tests {
         let client = SupabaseClient::new_for_test(&server.uri(), "test-key");
         let payloads = vec![make_session_payload("uuid-1", "S0001")];
         let result = client.push_sessions(&payloads).await;
-        assert!(matches!(result, Err(SyncError::HttpError { status: 409, .. })));
+        assert!(matches!(
+            result,
+            Err(SyncError::HttpError { status: 409, .. })
+        ));
     }
 }

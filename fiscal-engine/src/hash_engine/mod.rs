@@ -50,11 +50,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     errors::{FiscalError, HashError, IntegrityError},
-    types::{
-        entry::FiscalEntry,
-        operation::OperationType,
-        tva::TvaRate,
-    },
+    types::{entry::FiscalEntry, operation::OperationType, tva::TvaRate},
 };
 use common::GENESIS_HASH;
 
@@ -345,7 +341,8 @@ pub fn verify_chain_integrity(entries: &[FiscalEntry]) -> Result<IntegrityReport
         }
 
         // --- Vérification 3 : hash recalculé ---
-        if let Ok(()) = verify_entry_hash(entry, &previous_hash) {} else {
+        if let Ok(()) = verify_entry_hash(entry, &previous_hash) {
+        } else {
             if first_failed_sequence.is_none() {
                 first_failed_sequence = Some(entry.sequence_number);
             }
@@ -360,8 +357,7 @@ pub fn verify_chain_integrity(entries: &[FiscalEntry]) -> Result<IntegrityReport
     // Si des violations ont été trouvées, on retourne une erreur agrégée
     if total_failures > 0 {
         return Err(IntegrityError::ChainCorrupted {
-            first_failed_sequence: first_failed_sequence
-                .unwrap_or(first.sequence_number),
+            first_failed_sequence: first_failed_sequence.unwrap_or(first.sequence_number),
             total_failures,
             total_checked: entries.len(),
         }
@@ -421,8 +417,10 @@ pub fn hex_decode(hex: &str) -> Result<[u8; 32], HashError> {
 
     let mut result = [0u8; 32];
     for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-        let high = hex_char_to_nibble(chunk[0]).map_err(|()| HashError::InvalidHashSize { received: 0 })?;
-        let low = hex_char_to_nibble(chunk[1]).map_err(|()| HashError::InvalidHashSize { received: 0 })?;
+        let high = hex_char_to_nibble(chunk[0])
+            .map_err(|()| HashError::InvalidHashSize { received: 0 })?;
+        let low = hex_char_to_nibble(chunk[1])
+            .map_err(|()| HashError::InvalidHashSize { received: 0 })?;
         result[i] = (high << 4) | low;
     }
     Ok(result)
@@ -467,8 +465,8 @@ pub fn build_entry_for_test(
     created_at_ms: u64,
     previous_hash: [u8; 32],
 ) -> FiscalEntry {
-    use common::{Cents, FiscalEntryId, SessionId};
     use crate::types::tva::TvaBreakdown;
+    use common::{Cents, FiscalEntryId, SessionId};
 
     let entry_id = FiscalEntryId::new();
     let entry_id_bytes = entry_id.0.into_bytes();
@@ -623,7 +621,10 @@ mod tests {
         let h1 = compute_entry_hash(&input);
         input.sequence_number = 2;
         let h2 = compute_entry_hash(&input);
-        assert_ne!(h1, h2, "Des séquences différentes doivent donner des hashs différents");
+        assert_ne!(
+            h1, h2,
+            "Des séquences différentes doivent donner des hashs différents"
+        );
     }
 
     #[test]
@@ -669,7 +670,10 @@ mod tests {
         let h1 = compute_entry_hash(&input);
         input.previous_hash = &prev2;
         let h2 = compute_entry_hash(&input);
-        assert_ne!(h1, h2, "Des previous_hash différents doivent donner des hashs différents");
+        assert_ne!(
+            h1, h2,
+            "Des previous_hash différents doivent donner des hashs différents"
+        );
     }
 
     #[test]
@@ -695,11 +699,14 @@ mod tests {
             OperationType::Discount,
             OperationType::ZClose,
         ];
-        let hashes: Vec<_> = ops.iter().map(|op| {
-            let mut i = base;
-            i.operation_type = *op;
-            compute_entry_hash(&i)
-        }).collect();
+        let hashes: Vec<_> = ops
+            .iter()
+            .map(|op| {
+                let mut i = base;
+                i.operation_type = *op;
+                compute_entry_hash(&i)
+            })
+            .collect();
 
         // Tous les hashs doivent être distincts
         for (i, h1) in hashes.iter().enumerate() {
@@ -779,8 +786,8 @@ mod tests {
     fn one_thousand_entry_chain_is_valid() {
         // Test de performance réaliste : 1 000 transactions (midi chargé)
         let entries = make_chain(1000);
-        let report = verify_chain_integrity(&entries)
-            .expect("Chaîne de 1 000 entrées doit être valide");
+        let report =
+            verify_chain_integrity(&entries).expect("Chaîne de 1 000 entrées doit être valide");
         assert_eq!(report.entries_checked, 1000);
         assert_eq!(report.last_sequence, 1000);
     }
@@ -877,7 +884,10 @@ mod tests {
                 total_checked,
             }) => {
                 // La violation est à la séquence 5
-                assert_eq!(first_failed_sequence, 5, "La première violation doit être à la séq. 5");
+                assert_eq!(
+                    first_failed_sequence, 5,
+                    "La première violation doit être à la séq. 5"
+                );
                 // Toutes les entrées doivent être vérifiées (pas de fail-fast sur les hashs)
                 assert_eq!(total_checked, 10);
                 // Au moins 1 violation (l'entrée 5 elle-même)
@@ -916,7 +926,10 @@ mod tests {
         match result.unwrap_err() {
             FiscalError::Integrity(IntegrityError::ChainCorrupted { total_failures, .. }) => {
                 // Au moins 2 violations, potentiellement plus (effet cascade sur previous_hash)
-                assert!(total_failures >= 2, "Au moins 2 violations attendues, obtenu {total_failures}");
+                assert!(
+                    total_failures >= 2,
+                    "Au moins 2 violations attendues, obtenu {total_failures}"
+                );
             }
             other => panic!("Attendu ChainCorrupted, obtenu : {other}"),
         }
@@ -939,10 +952,9 @@ mod tests {
     #[test]
     fn hex_encode_decode_roundtrip() {
         let original = [
-            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
-            0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
-            0x00, 0xFF, 0x0F, 0xF0, 0xAA, 0x55, 0x33, 0xCC,
-            0x11, 0x22, 0x44, 0x88, 0xBB, 0xDD, 0xEE, 0x77,
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54,
+            0x32, 0x10, 0x00, 0xFF, 0x0F, 0xF0, 0xAA, 0x55, 0x33, 0xCC, 0x11, 0x22, 0x44, 0x88,
+            0xBB, 0xDD, 0xEE, 0x77,
         ];
         let hex = hex_encode(&original);
         assert_eq!(hex.len(), 64);

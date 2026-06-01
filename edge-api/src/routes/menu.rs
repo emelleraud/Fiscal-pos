@@ -98,16 +98,14 @@ fn load_menu_from_file(data_dir: &str) -> Option<MenuResponse> {
 /// Permet à la caisse de démarrer même sans configuration initiale.
 fn default_menu() -> MenuResponse {
     MenuResponse {
-        items: vec![
-            MenuItem {
-                id: "default-001".to_string(),
-                name: "Article générique".to_string(),
-                price_ttc_cents: 1000,
-                tva_rate: TvaRateDto::Intermediaire10,
-                category: "Général".to_string(),
-                available: true,
-            },
-        ],
+        items: vec![MenuItem {
+            id: "default-001".to_string(),
+            name: "Article générique".to_string(),
+            price_ttc_cents: 1000,
+            tva_rate: TvaRateDto::Intermediaire10,
+            category: "Général".to_string(),
+            available: true,
+        }],
         last_updated_ms: 0,
         version: 0,
     }

@@ -28,8 +28,7 @@ use axum::{
 use fiscal_engine::{
     archive_engine::{archive_exists, signing_key_from_bytes},
     errors::{ArchiveError, FiscalError},
-    export_archive, hex_decode, persist_archive_metadata, sign_archive,
-    hex_encode,
+    export_archive, hex_decode, hex_encode, persist_archive_metadata, sign_archive,
 };
 use serde::Serialize;
 use tracing::info;
@@ -104,8 +103,8 @@ pub async fn generate_archive_handler(
     // 4. Signer avec Ed25519
     let site_id = std::env::var("SITE_ID").unwrap_or_else(|_| "UNKNOWN".to_string());
     let software_version = env!("CARGO_PKG_VERSION");
-    let signed = sign_archive(export, &signing_key, software_version, &site_id)
-        .map_err(ApiErr::from)?;
+    let signed =
+        sign_archive(export, &signing_key, software_version, &site_id).map_err(ApiErr::from)?;
 
     // 5. Écrire le CSV sur disque
     let archives_dir = format!("{}/archives", state.data_dir);
@@ -161,15 +160,12 @@ pub async fn generate_archive_handler(
 ///
 /// La variable doit contenir 64 caractères hexadécimaux (32 octets Ed25519).
 fn load_signing_key() -> Result<ed25519_dalek::SigningKey, String> {
-    let hex = std::env::var("FISCAL_SIGNING_KEY_HEX").map_err(|_| {
-        "Variable d'environnement FISCAL_SIGNING_KEY_HEX manquante".to_string()
-    })?;
+    let hex = std::env::var("FISCAL_SIGNING_KEY_HEX")
+        .map_err(|_| "Variable d'environnement FISCAL_SIGNING_KEY_HEX manquante".to_string())?;
 
-    let bytes = hex_decode(&hex)
-        .map_err(|e| format!("FISCAL_SIGNING_KEY_HEX invalide : {e}"))?;
+    let bytes = hex_decode(&hex).map_err(|e| format!("FISCAL_SIGNING_KEY_HEX invalide : {e}"))?;
 
-    signing_key_from_bytes(&bytes)
-        .map_err(|e| format!("Clé Ed25519 invalide : {e}"))
+    signing_key_from_bytes(&bytes).map_err(|e| format!("Clé Ed25519 invalide : {e}"))
 }
 
 /// Encode 64 octets (signature Ed25519) en chaîne hexadécimale de 128 caractères.

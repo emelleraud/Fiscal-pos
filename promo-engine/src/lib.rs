@@ -12,6 +12,6 @@ pub mod types;
 
 pub use evaluator::evaluate;
 pub use types::{
-    Cart, CartItem, EvalResult, PromoApplication,
-    Promotion, PromoType, Trigger, TvaAllocation, TvaRateKey,
+    Cart, CartItem, EvalResult, PromoApplication, PromoType, Promotion, Trigger, TvaAllocation,
+    TvaRateKey,
 };

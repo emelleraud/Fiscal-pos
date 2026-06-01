@@ -28,7 +28,10 @@ pub mod orders;
 pub mod promotions;
 pub mod sessions;
 
-use axum::{routing::{get, post}, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 
 use crate::app::AppState;
 
@@ -40,17 +43,35 @@ pub fn build_router(state: AppState) -> Router {
         // --- Menu ---
         .route("/api/v1/menu", get(menu::menu_handler))
         // --- Sessions ---
-        .route("/api/v1/sessions/current", get(sessions::get_current_session_handler))
-        .route("/api/v1/sessions/open",    post(sessions::open_session_handler))
-        .route("/api/v1/sessions/close",   post(sessions::close_session_handler))
+        .route(
+            "/api/v1/sessions/current",
+            get(sessions::get_current_session_handler),
+        )
+        .route(
+            "/api/v1/sessions/open",
+            post(sessions::open_session_handler),
+        )
+        .route(
+            "/api/v1/sessions/close",
+            post(sessions::close_session_handler),
+        )
         // --- Commandes ---
-        .route("/api/v1/orders",               post(orders::create_order_handler))
-        .route("/api/v1/orders/:id",           get(orders::get_order_handler))
-        .route("/api/v1/orders/:id/pay",       post(orders::pay_order_handler))
-        .route("/api/v1/orders/:id/cancel",    post(orders::cancel_order_handler))
+        .route("/api/v1/orders", post(orders::create_order_handler))
+        .route("/api/v1/orders/:id", get(orders::get_order_handler))
+        .route("/api/v1/orders/:id/pay", post(orders::pay_order_handler))
+        .route(
+            "/api/v1/orders/:id/cancel",
+            post(orders::cancel_order_handler),
+        )
         // --- Promotions ---
-        .route("/api/v1/promotions/available", get(promotions::get_available_promotions))
+        .route(
+            "/api/v1/promotions/available",
+            get(promotions::get_available_promotions),
+        )
         // --- Archive annuelle NF525 §7 ---
-        .route("/api/v1/archive/:year",        post(archive::generate_archive_handler))
+        .route(
+            "/api/v1/archive/:year",
+            post(archive::generate_archive_handler),
+        )
         .with_state(state)
 }

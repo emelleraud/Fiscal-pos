@@ -69,7 +69,9 @@ pub enum FiscalError {
     },
 
     /// Taux de TVA incohérent avec le montant déclaré.
-    #[error("Décomposition TVA invalide : total HT {ht_cents} + TVA {tva_cents} ≠ TTC {ttc_cents}")]
+    #[error(
+        "Décomposition TVA invalide : total HT {ht_cents} + TVA {tva_cents} ≠ TTC {ttc_cents}"
+    )]
     InvalidTvaDecomposition {
         /// Montant hors taxe en centimes.
         ht_cents: i64,
@@ -285,7 +287,10 @@ mod tests {
         let hash_err = HashError::InvalidHashSize { received: 16 };
         let fiscal_err = FiscalError::from(hash_err);
         let msg = fiscal_err.to_string();
-        assert!(msg.contains("16"), "Le message doit contenir la taille reçue");
+        assert!(
+            msg.contains("16"),
+            "Le message doit contenir la taille reçue"
+        );
         assert!(msg.contains("hash"), "Le message doit mentionner 'hash'");
     }
 
@@ -297,8 +302,14 @@ mod tests {
         };
         let fiscal_err = FiscalError::from(int_err);
         let msg = fiscal_err.to_string();
-        assert!(msg.contains("5"), "Le message doit contenir la séquence attendue");
-        assert!(msg.contains("7"), "Le message doit contenir la séquence trouvée");
+        assert!(
+            msg.contains("5"),
+            "Le message doit contenir la séquence attendue"
+        );
+        assert!(
+            msg.contains("7"),
+            "Le message doit contenir la séquence trouvée"
+        );
     }
 
     #[test]

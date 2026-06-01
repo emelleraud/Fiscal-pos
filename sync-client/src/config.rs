@@ -156,11 +156,12 @@ fn parse_env_u32(key: &str, default: u32) -> Result<u32, SyncError> {
 /// Jitter pseudo-aléatoire (0..1000ms) basé sur le timestamp système.
 /// Pas de dépendance `rand` pour rester minimal.
 fn jitter_ms() -> u64 {
-    u64::from(std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_millis())
-        % 1_000
+    u64::from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_millis(),
+    ) % 1_000
 }
 
 // ---------------------------------------------------------------------------
@@ -213,9 +214,12 @@ mod tests {
     #[test]
     fn backoff_capped_at_max() {
         let config = base_config(); // max = 300s = 300_000ms
-        // À partir de la tentative 10 : 500 * 2^10 = 512_000ms > 300_000ms
+                                    // À partir de la tentative 10 : 500 * 2^10 = 512_000ms > 300_000ms
         let d = config.backoff_duration(20);
-        assert!(d.as_millis() <= 301_000, "Backoff dépasse le maximum + jitter");
+        assert!(
+            d.as_millis() <= 301_000,
+            "Backoff dépasse le maximum + jitter"
+        );
     }
 
     #[test]

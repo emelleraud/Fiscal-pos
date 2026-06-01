@@ -35,24 +35,26 @@ use tracing_subscriber::EnvFilter;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
-use crate::{
-    client::SupabaseClient,
-    config::SyncConfig,
-    sync_loop::run_sync_cycle,
-};
+use crate::{client::SupabaseClient, config::SyncConfig, sync_loop::run_sync_cycle};
 use fiscal_engine::journal::store::JournalStore;
 
 #[tokio::main]
 async fn main() {
     // 1. Logging
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("sync_client=info"));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("sync_client=info"));
 
     let log_json = std::env::var("RUST_LOG_FORMAT").as_deref() == Ok("json");
     if log_json {
-        tracing_subscriber::fmt().json().with_env_filter(filter).init();
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(filter)
+            .init();
     } else {
-        tracing_subscriber::fmt().pretty().with_env_filter(filter).init();
+        tracing_subscriber::fmt()
+            .pretty()
+            .with_env_filter(filter)
+            .init();
     }
 
     // 2. Configuration
@@ -126,7 +128,7 @@ async fn open_database(database_url: &str) -> Result<sqlx::sqlite::SqlitePool, s
     let options = SqliteConnectOptions::new()
         .filename(path)
         .create_if_missing(false) // La base doit exister (créée par edge-api)
-        .read_only(false)         // Besoin de UPDATE synced=1
+        .read_only(false) // Besoin de UPDATE synced=1
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .foreign_keys(true);
 
@@ -139,9 +141,7 @@ async fn open_database(database_url: &str) -> Result<sqlx::sqlite::SqlitePool, s
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Handler Ctrl+C");
+        tokio::signal::ctrl_c().await.expect("Handler Ctrl+C");
     };
 
     #[cfg(unix)]

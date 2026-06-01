@@ -175,11 +175,11 @@ fn tva_rate_str(rate: TvaRate) -> String {
 fn operation_type_str(op: fiscal_engine::types::operation::OperationType) -> String {
     use fiscal_engine::types::operation::OperationType;
     match op {
-        OperationType::Sale     => "SALE",
-        OperationType::Refund   => "REFUND",
+        OperationType::Sale => "SALE",
+        OperationType::Refund => "REFUND",
         OperationType::Discount => "DISCOUNT",
-        OperationType::Cancel   => "VOID",
-        OperationType::ZClose   => "CORRECTION",
+        OperationType::Cancel => "VOID",
+        OperationType::ZClose => "CORRECTION",
     }
     .to_string()
 }
@@ -207,8 +207,8 @@ pub(crate) fn serialize_batch(
     serde_json::to_string(&payloads)
 }
 
-    //AMV ajouté le 11/06/26 2215 *************************************
-    //AMV remplacé le 11/06/26 2300 *************************************
+//AMV ajouté le 11/06/26 2215 *************************************
+//AMV remplacé le 11/06/26 2300 *************************************
 // ---------------------------------------------------------------------------
 // Payload d'une session vers Supabase
 // ---------------------------------------------------------------------------
@@ -247,21 +247,21 @@ impl SessionPayload {
     pub fn from_session(session: &fiscal_engine::types::session::Session, site_id: &str) -> Self {
         use fiscal_engine::types::session::SessionStatus;
         Self {
-            id:             session.id.0.to_string(),
-            site_id:        site_id.to_string(),
-            session_ref:    format!("S{:04}", session.sequence_number),
-            opened_at:      ms_to_iso8601(session.opened_at_ms),
-            closed_at:      session.closed_at_ms.map(ms_to_iso8601),
-            operator_id:    None,
+            id: session.id.0.to_string(),
+            site_id: site_id.to_string(),
+            session_ref: format!("S{:04}", session.sequence_number),
+            opened_at: ms_to_iso8601(session.opened_at_ms),
+            closed_at: session.closed_at_ms.map(ms_to_iso8601),
+            operator_id: None,
             opening_amount: 0,
             status: match session.status {
-                SessionStatus::Open   => "open".to_string(),
+                SessionStatus::Open => "open".to_string(),
                 SessionStatus::Closed => "closed".to_string(),
             },
         }
     }
 }
-    
+
 // ---------------------------------------------------------------------------
 // Payload d'un rapport Z vers Supabase
 // ---------------------------------------------------------------------------
@@ -271,25 +271,25 @@ impl SessionPayload {
 /// Colonnes cibles : `public.z_reports`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZReportPayload {
-    pub id:              String,
-    pub site_id:         String,
-    pub session_id:      String,
-    pub report_number:   i64,
-    pub generated_at:    String,
-    pub total_sales:     i64,
-    pub total_refunds:   i64,
+    pub id: String,
+    pub site_id: String,
+    pub session_id: String,
+    pub report_number: i64,
+    pub generated_at: String,
+    pub total_sales: i64,
+    pub total_refunds: i64,
     pub total_discounts: i64,
-    pub net_revenue:     i64,
+    pub net_revenue: i64,
     pub tva_5_5_base_ht: i64,
-    pub tva_5_5_amount:  i64,
-    pub tva_10_base_ht:  i64,
-    pub tva_10_amount:   i64,
-    pub tva_20_base_ht:  i64,
-    pub tva_20_amount:   i64,
-    pub entry_count:     i64,
-    pub first_sequence:  Option<i64>,
-    pub last_sequence:   Option<i64>,
-    pub report_hash:     Option<String>,
+    pub tva_5_5_amount: i64,
+    pub tva_10_base_ht: i64,
+    pub tva_10_amount: i64,
+    pub tva_20_base_ht: i64,
+    pub tva_20_amount: i64,
+    pub entry_count: i64,
+    pub first_sequence: Option<i64>,
+    pub last_sequence: Option<i64>,
+    pub report_hash: Option<String>,
 }
 
 impl ZReportPayload {
@@ -300,27 +300,28 @@ impl ZReportPayload {
     #[must_use]
     pub fn from_z_report(report: &ZReport, site_id: &str) -> Self {
         let total_refunds = report.total_refunds_cents.0 + report.total_cancels_cents.0;
-        let net_revenue   = report.total_sales_cents.0 - total_refunds - report.total_discounts_cents.0;
+        let net_revenue =
+            report.total_sales_cents.0 - total_refunds - report.total_discounts_cents.0;
         Self {
-            id:              report.id.to_string(),
-            site_id:         site_id.to_string(),
-            session_id:      report.session_id.0.to_string(),
-            report_number:   report.session_sequence_number.cast_signed(),
-            generated_at:    ms_to_iso8601(report.generated_at_ms),
-            total_sales:     report.total_sales_cents.0,
+            id: report.id.to_string(),
+            site_id: site_id.to_string(),
+            session_id: report.session_id.0.to_string(),
+            report_number: report.session_sequence_number.cast_signed(),
+            generated_at: ms_to_iso8601(report.generated_at_ms),
+            total_sales: report.total_sales_cents.0,
             total_refunds,
             total_discounts: report.total_discounts_cents.0,
             net_revenue,
             tva_5_5_base_ht: report.tva_5_5_breakdown.ht_cents.0,
-            tva_5_5_amount:  report.tva_5_5_breakdown.tva_cents.0,
-            tva_10_base_ht:  report.tva_10_breakdown.ht_cents.0,
-            tva_10_amount:   report.tva_10_breakdown.tva_cents.0,
-            tva_20_base_ht:  report.tva_20_breakdown.ht_cents.0,
-            tva_20_amount:   report.tva_20_breakdown.tva_cents.0,
-            entry_count:     report.entry_count.cast_signed(),
-            first_sequence:  Some(report.first_entry_sequence.cast_signed()),
-            last_sequence:   Some(report.last_entry_sequence.cast_signed()),
-            report_hash:     Some(hex_encode(&report.closing_hash)),
+            tva_5_5_amount: report.tva_5_5_breakdown.tva_cents.0,
+            tva_10_base_ht: report.tva_10_breakdown.ht_cents.0,
+            tva_10_amount: report.tva_10_breakdown.tva_cents.0,
+            tva_20_base_ht: report.tva_20_breakdown.ht_cents.0,
+            tva_20_amount: report.tva_20_breakdown.tva_cents.0,
+            entry_count: report.entry_count.cast_signed(),
+            first_sequence: Some(report.first_entry_sequence.cast_signed()),
+            last_sequence: Some(report.last_entry_sequence.cast_signed()),
+            report_hash: Some(hex_encode(&report.closing_hash)),
         }
     }
 }
@@ -349,11 +350,11 @@ pub struct RemoteConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::GENESIS_HASH;
     use fiscal_engine::{
         hash_engine::build_entry_for_test,
         types::{operation::OperationType, tva::TvaRate},
     };
-    use common::GENESIS_HASH;
 
     fn test_entry() -> FiscalEntry {
         build_entry_for_test(
@@ -409,8 +410,13 @@ mod tests {
     #[test]
     fn payload_tva_rate_reduit() {
         let entry = build_entry_for_test(
-            2, [0xAB; 16], OperationType::Sale, 550,
-            TvaRate::Reduit5_5, 0, GENESIS_HASH,
+            2,
+            [0xAB; 16],
+            OperationType::Sale,
+            550,
+            TvaRate::Reduit5_5,
+            0,
+            GENESIS_HASH,
         );
         let payload = FiscalEntryPayload::from_entry(&entry, "SITE");
         assert_eq!(payload.tva_rate, "5.5");
@@ -429,7 +435,10 @@ mod tests {
         let payload = FiscalEntryPayload::from_entry(&entry, "SITE");
         // Format attendu : YYYY-MM-DDTHH:MM:SSZ
         assert!(payload.signed_at.contains('T'), "signed_at doit contenir T");
-        assert!(payload.signed_at.ends_with('Z'), "signed_at doit finir par Z");
+        assert!(
+            payload.signed_at.ends_with('Z'),
+            "signed_at doit finir par Z"
+        );
         assert_eq!(payload.signed_at.len(), 20, "Format ISO 8601 = 20 chars");
     }
 
@@ -447,8 +456,13 @@ mod tests {
     fn serialize_batch_produces_json_array() {
         let e1 = test_entry();
         let e2 = build_entry_for_test(
-            2, [0xAB; 16], OperationType::Sale, 550,
-            TvaRate::Intermediaire10, 1_700_000_001_000, e1.hash,
+            2,
+            [0xAB; 16],
+            OperationType::Sale,
+            550,
+            TvaRate::Intermediaire10,
+            1_700_000_001_000,
+            e1.hash,
         );
         let json = serialize_batch(&[e1, e2], "SITE-001").expect("Serialisation OK");
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("JSON valide");
@@ -466,14 +480,22 @@ mod tests {
     fn serialize_batch_contains_site_id() {
         let entry = test_entry();
         let json = serialize_batch(&[entry], "MON-SITE").expect("Serialisation OK");
-        assert!(json.contains("MON-SITE"), "Le site_id doit etre dans le JSON");
+        assert!(
+            json.contains("MON-SITE"),
+            "Le site_id doit etre dans le JSON"
+        );
     }
 
     #[test]
     fn refund_payload_has_negative_amount() {
         let entry = build_entry_for_test(
-            3, [0xAB; 16], OperationType::Refund, -1100,
-            TvaRate::Intermediaire10, 0, GENESIS_HASH,
+            3,
+            [0xAB; 16],
+            OperationType::Refund,
+            -1100,
+            TvaRate::Intermediaire10,
+            0,
+            GENESIS_HASH,
         );
         let payload = FiscalEntryPayload::from_entry(&entry, "SITE");
         assert!(
@@ -525,5 +547,4 @@ mod tests {
         assert!(payload.opened_at.ends_with('Z'));
         assert_eq!(payload.opened_at.len(), 20);
     }
-
 }

@@ -7,16 +7,16 @@
 
 use sqlx::sqlite::SqlitePoolOptions;
 use tempfile::NamedTempFile;
-use wiremock::{Mock, MockServer, ResponseTemplate};
 use wiremock::matchers::{method, path, path_regex};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use sync_client::{client::SupabaseClient, config::SyncConfig, sync_loop::run_sync_cycle};
+use common::GENESIS_HASH;
 use fiscal_engine::{
+    hash_engine::build_entry_for_test,
     journal::store::JournalStore,
     types::{operation::OperationType, session::Session, tva::TvaRate},
-    hash_engine::build_entry_for_test,
 };
-use common::GENESIS_HASH;
+use sync_client::{client::SupabaseClient, config::SyncConfig, sync_loop::run_sync_cycle};
 
 async fn setup_store(db_path: &str) -> JournalStore {
     let pool = SqlitePoolOptions::new()
@@ -31,17 +31,17 @@ async fn setup_store(db_path: &str) -> JournalStore {
 
 fn make_config(db_path: &str, supabase_url: &str) -> SyncConfig {
     SyncConfig {
-        database_url:         format!("sqlite:{}", db_path),
-        supabase_url:         supabase_url.to_string(),
+        database_url: format!("sqlite:{}", db_path),
+        supabase_url: supabase_url.to_string(),
         supabase_service_key: "test-key".to_string(),
-        site_id:              "SITE-001".to_string(),
-        sync_interval_secs:   30,
-        batch_size:           100,
-        max_retries:          1,
-        backoff_initial_ms:   10,
-        backoff_max_secs:     1,
-        http_timeout_secs:    10,
-        data_dir:             "./test_data".to_string(),
+        site_id: "SITE-001".to_string(),
+        sync_interval_secs: 30,
+        batch_size: 100,
+        max_retries: 1,
+        backoff_initial_ms: 10,
+        backoff_max_secs: 1,
+        http_timeout_secs: 10,
+        data_dir: "./test_data".to_string(),
     }
 }
 
@@ -56,28 +56,46 @@ async fn first_sync_cycle_pushes_session_and_entries() {
     let session_uuid = session.id.0;
     store.insert_session(&session).await.unwrap();
     let sid: [u8; 16] = session_uuid.as_bytes()[..16].try_into().unwrap();
-    let e1 = build_entry_for_test(1, sid, OperationType::Sale, 1000, TvaRate::Normal20, 1_700_000_001_000, GENESIS_HASH);
+    let e1 = build_entry_for_test(
+        1,
+        sid,
+        OperationType::Sale,
+        1000,
+        TvaRate::Normal20,
+        1_700_000_001_000,
+        GENESIS_HASH,
+    );
     let mut tx = store.begin_transaction().await.unwrap();
     store.insert_entry(&e1, &mut tx).await.unwrap();
     tx.commit().await.unwrap();
 
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/rest/v1/"))
+    Mock::given(method("GET"))
+        .and(path("/rest/v1/"))
         .respond_with(ResponseTemplate::new(200))
-        .mount(&server).await;
-    Mock::given(method("POST")).and(path("/rest/v1/sessions"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(
-            serde_json::json!([{"id": session_uuid.to_string()}])
-        ))
-        .mount(&server).await;
-    Mock::given(method("POST")).and(path("/rest/v1/fiscal_entries"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(
-            serde_json::json!([{"id": e1.id.0.to_string()}])
-        ))
-        .mount(&server).await;
-    Mock::given(method("GET")).and(path_regex("/rest/v1/site_configs.*"))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/v1/sessions"))
+        .respond_with(
+            ResponseTemplate::new(201)
+                .set_body_json(serde_json::json!([{"id": session_uuid.to_string()}])),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/v1/fiscal_entries"))
+        .respond_with(
+            ResponseTemplate::new(201)
+                .set_body_json(serde_json::json!([{"id": e1.id.0.to_string()}])),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex("/rest/v1/site_configs.*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let config = make_config(db_path, &server.uri());
     let client = SupabaseClient::new_for_test(&server.uri(), "test-key");
@@ -103,7 +121,15 @@ async fn crash_recovery_session_already_in_supabase_still_marks_synced() {
     let session_uuid = session.id.0;
     store.insert_session(&session).await.unwrap();
     let sid: [u8; 16] = session_uuid.as_bytes()[..16].try_into().unwrap();
-    let e1 = build_entry_for_test(1, sid, OperationType::Sale, 1000, TvaRate::Normal20, 1_700_000_001_000, GENESIS_HASH);
+    let e1 = build_entry_for_test(
+        1,
+        sid,
+        OperationType::Sale,
+        1000,
+        TvaRate::Normal20,
+        1_700_000_001_000,
+        GENESIS_HASH,
+    );
     let mut tx = store.begin_transaction().await.unwrap();
     store.insert_entry(&e1, &mut tx).await.unwrap();
     tx.commit().await.unwrap();
@@ -112,21 +138,30 @@ async fn crash_recovery_session_already_in_supabase_still_marks_synced() {
     assert_eq!(store.load_unsynced_entries(100).await.unwrap().len(), 1);
 
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/rest/v1/"))
+    Mock::given(method("GET"))
+        .and(path("/rest/v1/"))
         .respond_with(ResponseTemplate::new(200))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
     // Supabase retourne [] : ignore-duplicates a ignoré la session (déjà présente)
-    Mock::given(method("POST")).and(path("/rest/v1/sessions"))
+    Mock::given(method("POST"))
+        .and(path("/rest/v1/sessions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
-        .mount(&server).await;
-    Mock::given(method("POST")).and(path("/rest/v1/fiscal_entries"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(
-            serde_json::json!([{"id": e1.id.0.to_string()}])
-        ))
-        .mount(&server).await;
-    Mock::given(method("GET")).and(path_regex("/rest/v1/site_configs.*"))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/v1/fiscal_entries"))
+        .respond_with(
+            ResponseTemplate::new(201)
+                .set_body_json(serde_json::json!([{"id": e1.id.0.to_string()}])),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex("/rest/v1/site_configs.*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let config = make_config(db_path, &server.uri());
     let client = SupabaseClient::new_for_test(&server.uri(), "test-key");
@@ -148,12 +183,16 @@ async fn second_cycle_noop_when_everything_synced() {
     let store = setup_store(db_path).await;
 
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/rest/v1/"))
+    Mock::given(method("GET"))
+        .and(path("/rest/v1/"))
         .respond_with(ResponseTemplate::new(200))
-        .mount(&server).await;
-    Mock::given(method("GET")).and(path_regex("/rest/v1/site_configs.*"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex("/rest/v1/site_configs.*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
-        .mount(&server).await;
+        .mount(&server)
+        .await;
 
     let config = make_config(db_path, &server.uri());
     let client = SupabaseClient::new_for_test(&server.uri(), "test-key");

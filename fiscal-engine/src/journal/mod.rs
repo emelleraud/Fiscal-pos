@@ -368,7 +368,10 @@ impl Journal {
             session_id,
             operation_type: OperationType::ZClose,
             amount_ttc_cents: Cents::ZERO,
-            tva_breakdown: TvaBreakdown::from_ttc(Cents::ZERO, crate::types::tva::TvaRate::Intermediaire10),
+            tva_breakdown: TvaBreakdown::from_ttc(
+                Cents::ZERO,
+                crate::types::tva::TvaRate::Intermediaire10,
+            ),
             tva_5_5_breakdown: TvaBreakdown::zero(crate::types::tva::TvaRate::Reduit5_5),
             tva_10_breakdown: TvaBreakdown::zero(crate::types::tva::TvaRate::Intermediaire10),
             tva_20_breakdown: TvaBreakdown::zero(crate::types::tva::TvaRate::Normal20),
@@ -382,7 +385,9 @@ impl Journal {
 
         // Maintenant on ferme la session
         let mut session_guard = self.active_session.lock().await;
-        let session = session_guard.as_mut().ok_or(SessionError::NoActiveSession)?;
+        let session = session_guard
+            .as_mut()
+            .ok_or(SessionError::NoActiveSession)?;
 
         let closing_hash = zclose_entry.hash;
         session.status = SessionStatus::Closed;
@@ -447,7 +452,7 @@ impl Journal {
     /// Accès au store sous-jacent (pour les opérations avancées : sync, archivage).
     ///
     /// Utilisé par `sync-client` et par le générateur de rapport Z (Étape 5).
-    #[must_use] 
+    #[must_use]
     pub fn store(&self) -> &JournalStore {
         &self.store
     }

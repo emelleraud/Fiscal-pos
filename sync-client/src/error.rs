@@ -69,7 +69,10 @@ impl SyncError {
         match self {
             Self::Network(_) | Self::Timeout { .. } => true,
             Self::HttpError { status, .. } => *status >= 500,
-            Self::Database(_) | Self::Fiscal(_) | Self::Serialization(_) | Self::FatalConfig { .. } => false,
+            Self::Database(_)
+            | Self::Fiscal(_)
+            | Self::Serialization(_)
+            | Self::FatalConfig { .. } => false,
         }
     }
 }

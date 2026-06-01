@@ -35,7 +35,7 @@ pub struct Promotion {
     pub priority: i32,
     pub valid_from: Option<Date>,
     pub valid_to: Option<Date>,
-    pub days_of_week: Option<Vec<u8>>,  // 1=Lun, 7=Dim
+    pub days_of_week: Option<Vec<u8>>, // 1=Lun, 7=Dim
     pub time_from: Option<Time>,
     pub time_to: Option<Time>,
 }
@@ -67,15 +67,15 @@ pub struct EvalResult {
 pub struct PromoApplication {
     pub promo_id: Uuid,
     pub promo_name: String,
-    pub discount_cents: i64,        // toujours positif
+    pub discount_cents: i64, // toujours positif
     pub tva_allocation: TvaAllocation,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TvaAllocation {
     pub cents_5_5: i64,
-    pub cents_10:  i64,
-    pub cents_20:  i64,
+    pub cents_10: i64,
+    pub cents_20: i64,
 }
 
 impl TvaAllocation {

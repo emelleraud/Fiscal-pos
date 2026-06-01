@@ -239,7 +239,8 @@ mod tests {
     fn total_tva_10_only() {
         let r = sample_report();
         // 10 000 TTC à 10% → TVA = 909 centimes (arrondi)
-        let expected_tva = TvaBreakdown::from_ttc(Cents(10_000), TvaRate::Intermediaire10).tva_cents;
+        let expected_tva =
+            TvaBreakdown::from_ttc(Cents(10_000), TvaRate::Intermediaire10).tva_cents;
         assert_eq!(r.total_tva_cents(), expected_tva);
     }
 

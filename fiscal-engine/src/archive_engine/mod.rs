@@ -37,7 +37,7 @@
 //! - Une ligne par `FiscalEntry`, ordre chronologique par `sequence_number`
 //! - `reason` et `order_reference` vides si NULL
 
-use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey, Verifier};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::SqlitePool;
 
@@ -107,10 +107,7 @@ pub async fn export_archive(pool: &SqlitePool, year: u32) -> Result<ArchiveExpor
 
     // 3. Générer le CSV
     let csv_content = generate_csv(&entries).map_err(|reason| {
-        FiscalError::Archive(ArchiveError::CsvGenerationFailed {
-            year,
-            reason,
-        })
+        FiscalError::Archive(ArchiveError::CsvGenerationFailed { year, reason })
     })?;
 
     // 4. SHA-256 du CSV (inclut le BOM)
@@ -215,12 +212,11 @@ pub fn verify_archive_signature(archive: &SignedArchive) -> Result<(), FiscalErr
     }
 
     // 2. Reconstruire la clé publique
-    let verifying_key =
-        VerifyingKey::from_bytes(&archive.public_key).map_err(|e| {
-            ArchiveError::InvalidSigningKey {
-                reason: format!("Clé publique invalide: {e}"),
-            }
-        })?;
+    let verifying_key = VerifyingKey::from_bytes(&archive.public_key).map_err(|e| {
+        ArchiveError::InvalidSigningKey {
+            reason: format!("Clé publique invalide: {e}"),
+        }
+    })?;
 
     // 3. Reconstruire la signature
     let signature = Signature::from_bytes(&archive.signature);
@@ -262,11 +258,10 @@ pub async fn persist_archive_metadata(
     let year = archive.export.year;
 
     // Vérifier l'idempotence (une archive par an)
-    let existing =
-        sqlx::query("SELECT year FROM archive_metadata WHERE year = ?")
-            .bind(i64::from(year))
-            .fetch_optional(pool)
-            .await?;
+    let existing = sqlx::query("SELECT year FROM archive_metadata WHERE year = ?")
+        .bind(i64::from(year))
+        .fetch_optional(pool)
+        .await?;
 
     if existing.is_some() {
         return Err(ArchiveError::ArchiveAlreadyExists { year }.into());
@@ -477,7 +472,7 @@ fn now_ms() -> u64 {
 mod tests {
     use super::*;
     use crate::{
-        journal::{Journal, store::JournalStore},
+        journal::{store::JournalStore, Journal},
         types::{
             entry::FiscalEntryData,
             operation::OperationType,
@@ -496,15 +491,25 @@ mod tests {
             .await
             .expect("Pool SQLite");
         sqlx::query(include_str!("../../migrations/0001_initial_schema.sql"))
-            .execute(&pool).await.expect("Migration 0001");
+            .execute(&pool)
+            .await
+            .expect("Migration 0001");
         sqlx::query(include_str!("../../migrations/0002_z_reports_archives.sql"))
-            .execute(&pool).await.expect("Migration 0002");
+            .execute(&pool)
+            .await
+            .expect("Migration 0002");
         sqlx::query(include_str!("../../migrations/0003_sessions_sync.sql"))
-            .execute(&pool).await.expect("Migration 0003");
+            .execute(&pool)
+            .await
+            .expect("Migration 0003");
         sqlx::query(include_str!("../../migrations/0004_z_reports_sync.sql"))
-            .execute(&pool).await.expect("Migration 0004");
+            .execute(&pool)
+            .await
+            .expect("Migration 0004");
         sqlx::query(include_str!("../../migrations/0005_multi_tva.sql"))
-            .execute(&pool).await.expect("Migration 0005");
+            .execute(&pool)
+            .await
+            .expect("Migration 0005");
         pool
     }
 
@@ -521,26 +526,31 @@ mod tests {
         let journal = journal_from_pool(pool).await;
         let session = journal.open_session().await.expect("Session");
         for i in 1..=n_sales {
-            journal.record_transaction(FiscalEntryData {
-                session_id: session.id,
-                operation_type: OperationType::Sale,
-                amount_ttc_cents: Cents((i * 100) as i64),
-                tva_breakdown: TvaBreakdown::from_ttc(
-                    Cents((i * 100) as i64),
-                    TvaRate::Intermediaire10,
-                ),
-                tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
-                tva_10_breakdown: TvaBreakdown::from_ttc(
-                    Cents((i * 100) as i64),
-                    TvaRate::Intermediaire10,
-                ),
-                tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
-                reason: None,
-                order_reference: Some(format!("ORD-{i:04}")),
-            }).await.expect("Vente");
+            journal
+                .record_transaction(FiscalEntryData {
+                    session_id: session.id,
+                    operation_type: OperationType::Sale,
+                    amount_ttc_cents: Cents((i * 100) as i64),
+                    tva_breakdown: TvaBreakdown::from_ttc(
+                        Cents((i * 100) as i64),
+                        TvaRate::Intermediaire10,
+                    ),
+                    tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
+                    tva_10_breakdown: TvaBreakdown::from_ttc(
+                        Cents((i * 100) as i64),
+                        TvaRate::Intermediaire10,
+                    ),
+                    tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
+                    reason: None,
+                    order_reference: Some(format!("ORD-{i:04}")),
+                })
+                .await
+                .expect("Vente");
         }
         journal.close_session().await.expect("Clôture");
-        generate_z_report(pool, session.id).await.expect("Rapport Z");
+        generate_z_report(pool, session.id)
+            .await
+            .expect("Rapport Z");
         session.id
     }
 
@@ -550,19 +560,33 @@ mod tests {
     fn csv_starts_with_bom() {
         use crate::hash_engine::build_entry_for_test;
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 1_700_000_000_000, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            1_700_000_000_000,
+            common::GENESIS_HASH,
         );
         let csv = generate_csv(&[entry]).expect("CSV généré");
-        assert_eq!(&csv[..3], UTF8_BOM, "Le CSV doit commencer par le BOM UTF-8");
+        assert_eq!(
+            &csv[..3],
+            UTF8_BOM,
+            "Le CSV doit commencer par le BOM UTF-8"
+        );
     }
 
     #[test]
     fn csv_header_is_correct() {
         use crate::hash_engine::build_entry_for_test;
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 0, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
         );
         let csv = generate_csv(&[entry]).expect("CSV généré");
         let content = std::str::from_utf8(&csv[3..]).expect("UTF-8 valide");
@@ -574,21 +598,34 @@ mod tests {
     fn csv_line_has_correct_column_count() {
         use crate::hash_engine::build_entry_for_test;
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 0, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
         );
         let line = format_csv_line(&entry).expect("Ligne CSV");
         let col_count = line.split(';').count();
         // En-tête a 13 colonnes → chaque ligne doit en avoir 13
-        assert_eq!(col_count, 13, "Chaque ligne doit avoir 13 colonnes, obtenu {col_count}");
+        assert_eq!(
+            col_count, 13,
+            "Chaque ligne doit avoir 13 colonnes, obtenu {col_count}"
+        );
     }
 
     #[test]
     fn csv_hash_is_sha256_of_content() {
         use crate::hash_engine::build_entry_for_test;
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 500,
-            TvaRate::Reduit5_5, 0, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            500,
+            TvaRate::Reduit5_5,
+            0,
+            common::GENESIS_HASH,
         );
         let csv = generate_csv(&[entry]).expect("CSV");
         let computed = sha256_bytes(&csv);
@@ -640,8 +677,13 @@ mod tests {
         use crate::hash_engine::build_entry_for_test;
 
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 0, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
         );
         let csv = generate_csv(&[entry]).expect("CSV");
         let csv_hash = sha256_bytes(&csv);
@@ -658,8 +700,7 @@ mod tests {
         };
 
         let key = fresh_signing_key();
-        let signed = sign_archive(export, &key, "1.0.0", "12345678900000")
-            .expect("Signature");
+        let signed = sign_archive(export, &key, "1.0.0", "12345678900000").expect("Signature");
 
         // La vérification doit réussir
         assert!(verify_archive_signature(&signed).is_ok());
@@ -670,21 +711,31 @@ mod tests {
         use crate::hash_engine::build_entry_for_test;
 
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 0, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
         );
         let csv = generate_csv(&[entry]).expect("CSV");
         let csv_hash = sha256_bytes(&csv);
 
         let export = ArchiveExport {
-            year: 2024, entry_count: 1, session_count: 1,
-            first_sequence: 1, last_sequence: 1, generated_at_ms: 0,
-            csv_content: csv, csv_hash,
+            year: 2024,
+            entry_count: 1,
+            session_count: 1,
+            first_sequence: 1,
+            last_sequence: 1,
+            generated_at_ms: 0,
+            csv_content: csv,
+            csv_hash,
         };
 
         let key = fresh_signing_key();
-        let mut signed = sign_archive(export.clone(), &key, "1.0.0", "12345678900000")
-            .expect("Signature");
+        let mut signed =
+            sign_archive(export.clone(), &key, "1.0.0", "12345678900000").expect("Signature");
 
         // Altérer le contenu CSV après signature
         signed.export.csv_content.push(b'X');
@@ -698,29 +749,41 @@ mod tests {
         use crate::hash_engine::build_entry_for_test;
 
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 0, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
         );
         let csv = generate_csv(&[entry]).expect("CSV");
         let csv_hash = sha256_bytes(&csv);
 
         let export = ArchiveExport {
-            year: 2024, entry_count: 1, session_count: 1,
-            first_sequence: 1, last_sequence: 1, generated_at_ms: 0,
-            csv_content: csv, csv_hash,
+            year: 2024,
+            entry_count: 1,
+            session_count: 1,
+            first_sequence: 1,
+            last_sequence: 1,
+            generated_at_ms: 0,
+            csv_content: csv,
+            csv_hash,
         };
 
         let key1 = fresh_signing_key();
         let key2 = fresh_signing_key();
 
-        let mut signed = sign_archive(export, &key1, "1.0.0", "12345678900000")
-            .expect("Signature");
+        let mut signed = sign_archive(export, &key1, "1.0.0", "12345678900000").expect("Signature");
 
         // Remplacer la clé publique par celle d'une autre paire
         signed.public_key = key2.verifying_key().to_bytes();
 
         let result = verify_archive_signature(&signed);
-        assert!(result.is_err(), "Une mauvaise clé publique doit invalider la vérification");
+        assert!(
+            result.is_err(),
+            "Une mauvaise clé publique doit invalider la vérification"
+        );
     }
 
     // --- Génération de clé ---
@@ -748,21 +811,32 @@ mod tests {
 
         let pool = setup_pool().await;
         let entry = build_entry_for_test(
-            1, [0xAB; 16], OperationType::Sale, 1100,
-            TvaRate::Intermediaire10, 0, common::GENESIS_HASH,
+            1,
+            [0xAB; 16],
+            OperationType::Sale,
+            1100,
+            TvaRate::Intermediaire10,
+            0,
+            common::GENESIS_HASH,
         );
         let csv = generate_csv(&[entry]).expect("CSV");
         let csv_hash = sha256_bytes(&csv);
         let export = ArchiveExport {
-            year: 2023, entry_count: 1, session_count: 1,
-            first_sequence: 1, last_sequence: 1, generated_at_ms: 0,
-            csv_content: csv, csv_hash,
+            year: 2023,
+            entry_count: 1,
+            session_count: 1,
+            first_sequence: 1,
+            last_sequence: 1,
+            generated_at_ms: 0,
+            csv_content: csv,
+            csv_hash,
         };
         let key = fresh_signing_key();
         let signed = sign_archive(export, &key, "1.0.0", "SIRET001").expect("Signature");
 
         persist_archive_metadata(&pool, &signed, "/archives/2023.csv")
-            .await.expect("Première persistence");
+            .await
+            .expect("Première persistence");
 
         // Deuxième tentative doit échouer
         let result = persist_archive_metadata(&pool, &signed, "/archives/2023.csv").await;

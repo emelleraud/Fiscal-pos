@@ -117,13 +117,14 @@ pub struct ZReportSummary {
 pub async fn get_current_session_handler(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<SessionResponse>), ApiErr> {
-    let session = state
-        .journal
-        .active_session()
-        .await
-        .ok_or(fiscal_engine::errors::FiscalError::Session(
-            fiscal_engine::errors::SessionError::NoActiveSession,
-        ))?;
+    let session =
+        state
+            .journal
+            .active_session()
+            .await
+            .ok_or(fiscal_engine::errors::FiscalError::Session(
+                fiscal_engine::errors::SessionError::NoActiveSession,
+            ))?;
 
     let response = SessionResponse {
         session_id: session.id.to_string(),

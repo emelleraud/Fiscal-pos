@@ -29,8 +29,8 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use fiscal_engine::errors::{ArchiveError, FiscalError, SessionError};
 use common::ApiError;
+use fiscal_engine::errors::{ArchiveError, FiscalError, SessionError};
 use tracing::error;
 
 /// Wrapper newtype pour implémenter `IntoResponse` sur `FiscalError`.
@@ -80,17 +80,14 @@ fn classify_error(err: &FiscalError) -> (StatusCode, &'static str) {
         FiscalError::Session(SessionError::ZReportAlreadyGenerated { .. }) => {
             (StatusCode::CONFLICT, "Z_REPORT_ALREADY_GENERATED")
         }
-        FiscalError::SessionClosed { .. } => {
-            (StatusCode::CONFLICT, "SESSION_CLOSED")
-        }
+        FiscalError::SessionClosed { .. } => (StatusCode::CONFLICT, "SESSION_CLOSED"),
 
         // --- Erreurs de validation (données client) : 422 Unprocessable Entity ---
-        FiscalError::InvalidAmount { .. } => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_AMOUNT")
-        }
-        FiscalError::InvalidTvaDecomposition { .. } => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_TVA_DECOMPOSITION")
-        }
+        FiscalError::InvalidAmount { .. } => (StatusCode::UNPROCESSABLE_ENTITY, "INVALID_AMOUNT"),
+        FiscalError::InvalidTvaDecomposition { .. } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "INVALID_TVA_DECOMPOSITION",
+        ),
 
         // --- Erreurs d'archive ---
         FiscalError::Archive(ArchiveError::NoDataForYear { .. }) => {
@@ -99,22 +96,18 @@ fn classify_error(err: &FiscalError) -> (StatusCode, &'static str) {
         FiscalError::Archive(ArchiveError::ArchiveAlreadyExists { .. }) => {
             (StatusCode::CONFLICT, "ARCHIVE_ALREADY_EXISTS")
         }
-        FiscalError::Archive(ArchiveError::InvalidSigningKey { .. }) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "ARCHIVE_INVALID_SIGNING_KEY")
-        }
-        FiscalError::Archive(_) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "ARCHIVE_ERROR")
-        }
+        FiscalError::Archive(ArchiveError::InvalidSigningKey { .. }) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ARCHIVE_INVALID_SIGNING_KEY",
+        ),
+        FiscalError::Archive(_) => (StatusCode::INTERNAL_SERVER_ERROR, "ARCHIVE_ERROR"),
 
         // --- Erreurs internes (intégrité, hash, base) : 500 ---
-        FiscalError::Integrity(_) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "FISCAL_INTEGRITY_FAILURE")
-        }
-        FiscalError::Hash(_) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "FISCAL_HASH_ERROR")
-        }
-        FiscalError::Database(_) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "DATABASE_ERROR")
-        }
+        FiscalError::Integrity(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "FISCAL_INTEGRITY_FAILURE",
+        ),
+        FiscalError::Hash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "FISCAL_HASH_ERROR"),
+        FiscalError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "DATABASE_ERROR"),
     }
 }

@@ -25,8 +25,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
+use app::{build_app, AppState};
 use fiscal_engine::Journal;
-use app::{AppState, build_app};
 
 #[derive(Debug)]
 struct Config {
@@ -61,9 +61,15 @@ async fn main() {
         .unwrap_or_else(|_| EnvFilter::new("edge_api=info,fiscal_engine=info,tower_http=debug"));
 
     if config.log_json {
-        tracing_subscriber::fmt().json().with_env_filter(filter).init();
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(filter)
+            .init();
     } else {
-        tracing_subscriber::fmt().pretty().with_env_filter(filter).init();
+        tracing_subscriber::fmt()
+            .pretty()
+            .with_env_filter(filter)
+            .init();
     }
 
     info!(host = %config.host, port = config.port, "Démarrage edge-api");
@@ -134,9 +140,7 @@ async fn open_database(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Handler Ctrl+C");
+        tokio::signal::ctrl_c().await.expect("Handler Ctrl+C");
     };
 
     #[cfg(unix)]
