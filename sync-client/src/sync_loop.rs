@@ -1,4 +1,4 @@
-//! # sync_loop
+//! # `sync_loop`
 //!
 //! Boucle de synchronisation offline-first.
 //!
@@ -39,9 +39,9 @@
 //! - Aucune donnée fiscale n'est perdue en cas de panne réseau :
 //!   la queue locale (colonne `synced=0`) grandit indéfiniment jusqu'au retour du réseau
 //! - Le journal fiscal n'est **jamais bloqué** par la synchronisation :
-//!   les deux processus opèrent sur des connexions SQLite indépendantes
+//!   les deux processus opèrent sur des connexions `SQLite` indépendantes
 //! - La synchronisation est **read-only** sur le journal :
-//!   `mark_entries_synced()` est le seul UPDATE autorisé sur fiscal_entries
+//!   `mark_entries_synced()` est le seul UPDATE autorisé sur `fiscal_entries`
 //!
 //! ## Métriques
 //! Chaque cycle log ses résultats pour le monitoring :
@@ -74,7 +74,8 @@ use fiscal_engine::journal::store::JournalStore;
 ///
 /// # Errors
 /// Les erreurs transitoires sont gérées en interne (avec retry).
-/// Cette fonction retourne une erreur uniquement si la base SQLite est inaccessible.
+/// Cette fonction retourne une erreur uniquement si la base `SQLite` est inaccessible.
+#[allow(clippy::too_many_lines)]
 pub async fn run_sync_cycle(
     store: &JournalStore,
     client: &SupabaseClient,
@@ -121,7 +122,7 @@ pub async fn run_sync_cycle(
             Err(e) => {
                 error!(error = %e, "Sessions échouées — cycle interrompu");
                 metrics.batches_failed += 1;
-                metrics.duration_ms = cycle_start.elapsed().as_millis() as u64;
+                metrics.duration_ms = cycle_start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
                 return Ok(metrics);
             }
         }
@@ -153,7 +154,7 @@ pub async fn run_sync_cycle(
             Err(e) => {
                 error!(error = %e, "Rapports Z échoués — cycle interrompu");
                 metrics.batches_failed += 1;
-                metrics.duration_ms = cycle_start.elapsed().as_millis() as u64;
+                metrics.duration_ms = cycle_start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
                 return Ok(metrics);
             }
         }
@@ -173,14 +174,7 @@ pub async fn run_sync_cycle(
 
         let entry_ids: Vec<Uuid> = entries.iter().map(|e| e.id.0).collect();
 
-        let payloads = match build_payloads(&entries, &config.site_id) {
-            Ok(p) => p,
-            Err(e) => {
-                error!(error = %e, "Impossible de sérialiser le batch — batch ignoré");
-                metrics.batches_failed += 1;
-                break;
-            }
-        };
+        let payloads = build_payloads(&entries, &config.site_id);
 
         let push_result = push_with_retry(client, &payloads, config).await;
 
@@ -232,7 +226,7 @@ pub async fn run_sync_cycle(
         debug!("Promotions vérifiées depuis Supabase");
     }
 
-    metrics.duration_ms = cycle_start.elapsed().as_millis() as u64;
+    metrics.duration_ms = cycle_start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
 
     info!(
         sessions_pushed  = metrics.sessions_pushed,
@@ -367,12 +361,12 @@ async fn push_with_retry(
 fn build_payloads(
     entries: &[fiscal_engine::FiscalEntry],
     site_id: &str,
-) -> Result<Vec<crate::serializer::FiscalEntryPayload>, SyncError> {
+) -> Vec<crate::serializer::FiscalEntryPayload> {
     use crate::serializer::FiscalEntryPayload;
-    Ok(entries
+    entries
         .iter()
         .map(|e| FiscalEntryPayload::from_entry(e, site_id))
-        .collect())
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +434,7 @@ mod tests {
 
     #[test]
     fn build_payloads_empty_entries() {
-        let payloads = build_payloads(&[], "SITE-001").expect("OK");
+        let payloads = build_payloads(&[], "SITE-001");
         assert!(payloads.is_empty());
     }
 
@@ -456,7 +450,7 @@ mod tests {
             1, [0xAB; 16], OperationType::Sale, 1100,
             TvaRate::Intermediaire10, 0, GENESIS_HASH,
         );
-        let payloads = build_payloads(&[entry], "MON-SITE").expect("OK");
+        let payloads = build_payloads(&[entry], "MON-SITE");
         assert_eq!(payloads[0].site_id, "MON-SITE");
     }
 }

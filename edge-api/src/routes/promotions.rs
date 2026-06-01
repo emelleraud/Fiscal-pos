@@ -1,4 +1,4 @@
-//! # routes::promotions
+//! # `routes::promotions`
 //!
 //! Route de consultation des promotions actuellement actives.
 //!
@@ -26,17 +26,17 @@ pub struct AvailablePromo {
     pub id: String,
     /// Nom affiché de la promotion.
     pub name: String,
-    /// Type de promotion : fixed_amount, percentage, item_discount, bogo, happy_hour.
+    /// Type de promotion : `fixed_amount`, percentage, `item_discount`, bogo, `happy_hour`.
     pub promo_type: String,
     /// Mode de déclenchement : auto | manual.
-    /// Sérialisé en "trigger" (nom API) — la colonne SQLite s'appelle trigger_type.
+    /// Sérialisé en "trigger" (nom API) — la colonne `SQLite` s'appelle `trigger_type`.
     #[serde(rename = "trigger")]
     pub trigger_type: String,
     /// Remise fixe en centimes (si applicable).
     pub value_cents: Option<i64>,
     /// Remise en points de base (si applicable, ex: 1000 = 10%).
     pub value_bps: Option<i64>,
-    /// SKU cible (pour item_discount et bogo).
+    /// SKU cible (pour `item_discount` et bogo).
     pub target_sku: Option<String>,
 }
 
@@ -66,7 +66,7 @@ pub struct AvailablePromo {
 /// ```
 ///
 /// # Errors
-/// - `500` si la requête SQLite échoue
+/// - `500` si la requête `SQLite` échoue
 pub async fn get_available_promotions(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<AvailablePromo>>, StatusCode> {

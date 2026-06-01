@@ -1,4 +1,4 @@
-//! # routes::archive
+//! # `routes::archive`
 //!
 //! Route de génération de l'archive fiscale annuelle (NF525 §7).
 //!
@@ -59,7 +59,7 @@ pub struct ArchiveResponse {
     pub csv_path: String,
     /// SHA-256 du CSV (hex 64 caractères).
     pub csv_hash_hex: String,
-    /// Signature Ed25519 du csv_hash (hex 128 caractères).
+    /// Signature Ed25519 du `csv_hash` (hex 128 caractères).
     pub signature_hex: String,
     /// Clé publique Ed25519 (hex 64 caractères).
     pub public_key_hex: String,
@@ -174,8 +174,9 @@ fn load_signing_key() -> Result<ed25519_dalek::SigningKey, String> {
 
 /// Encode 64 octets (signature Ed25519) en chaîne hexadécimale de 128 caractères.
 fn hex_encode_64(bytes: &[u8; 64]) -> String {
+    use std::fmt::Write as _;
     bytes.iter().fold(String::with_capacity(128), |mut s, b| {
-        s.push_str(&format!("{b:02x}"));
+        write!(s, "{b:02x}").expect("writing to String is infallible");
         s
     })
 }

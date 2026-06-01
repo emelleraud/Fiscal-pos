@@ -1,4 +1,4 @@
-//! # routes::menu
+//! # `routes::menu`
 //!
 //! Route de consultation de la carte active du restaurant.
 //!
@@ -54,7 +54,6 @@ impl From<TvaRate> for TvaRateDto {
     fn from(rate: TvaRate) -> Self {
         match rate {
             TvaRate::Reduit5_5 => Self::Reduit5_5,
-            TvaRate::Intermediaire10 => Self::Intermediaire10,
             TvaRate::Normal20 => Self::Normal20,
             _ => Self::Intermediaire10, // fallback : taux intermédiaire par défaut
         }
@@ -80,7 +79,7 @@ pub struct MenuResponse {
 /// - `200 OK` avec la liste des articles
 pub async fn menu_handler(State(state): State<AppState>) -> (StatusCode, Json<MenuResponse>) {
     // Charger depuis le fichier menu.json si disponible
-    let menu = load_menu_from_file(&state.data_dir).unwrap_or_else(|| default_menu());
+    let menu = load_menu_from_file(&state.data_dir).unwrap_or_else(default_menu);
 
     (StatusCode::OK, Json(menu))
 }

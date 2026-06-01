@@ -2,7 +2,7 @@
 //!
 //! Construction de l'application Axum : état partagé + middlewares + routeur.
 //!
-//! ## AppState
+//! ## `AppState`
 //! L'état partagé entre tous les handlers Axum. Il est clonable (Arc interne)
 //! et injecté via `State<AppState>` dans chaque handler.
 //!
@@ -37,7 +37,7 @@ use crate::{middleware as mw, routes};
 pub struct AppState {
     /// Journal fiscal — point d'entrée unique pour toutes les opérations NF525.
     pub journal: Arc<Journal>,
-    /// Pool SQLite partagé (direct access pour promotions et autres tables).
+    /// Pool `SQLite` partagé (direct access pour promotions et autres tables).
     pub db: SqlitePool,
     /// Chemin du répertoire de données local du restaurant.
     pub data_dir: String,
@@ -47,8 +47,8 @@ impl AppState {
     /// Crée un nouvel état applicatif.
     ///
     /// # Arguments
-    /// * `journal` - Journal fiscal initialisé avec la pool SQLite.
-    /// * `db` - Pool SQLite partagé.
+    /// * `journal` - Journal fiscal initialisé avec la pool `SQLite`.
+    /// * `db` - Pool `SQLite` partagé.
     /// * `data_dir` - Chemin du répertoire de données (menu.json, archives).
     #[must_use]
     pub fn new(journal: Journal, db: SqlitePool, data_dir: String) -> Self {
@@ -72,7 +72,6 @@ impl AppState {
 /// Note : le timeout par requête est géré dans le middleware `request_id_middleware`
 /// via `tokio::time::timeout` plutôt que `tower::timeout::TimeoutLayer`, pour
 /// éviter les incompatibilités de types avec axum 0.7.
-#[must_use]
 pub fn build_app(state: AppState) -> Router {
     routes::build_router(state)
         .layer(middleware::from_fn(mw::request_id_middleware))

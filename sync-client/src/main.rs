@@ -15,7 +15,7 @@
 //! ```
 //!
 //! ## Garanties
-//! - Jamais de perte de données fiscales : la queue SQLite est persistée
+//! - Jamais de perte de données fiscales : la queue `SQLite` est persistée
 //! - Jamais de blocage de la caisse : sync en arrière-plan indépendant
 //! - Arrêt propre sur SIGTERM / Ctrl+C
 

@@ -41,9 +41,7 @@ pub async fn request_id_middleware(
     let request_id = req
         .headers()
         .get(&X_REQUEST_ID)
-        .and_then(|v| v.to_str().ok())
-        .map(ToString::to_string)
-        .unwrap_or_else(|| Uuid::now_v7().to_string());
+        .and_then(|v| v.to_str().ok()).map_or_else(|| Uuid::now_v7().to_string(), ToString::to_string);
 
     // Injecter dans les extensions pour que les handlers puissent le lire
     req.extensions_mut().insert(RequestId(request_id.clone()));
@@ -97,7 +95,6 @@ pub struct RequestId(pub String);
 /// # Sécurité
 /// Cette API ne doit **jamais** être exposée sur Internet.
 /// Le CORS est une défense en profondeur — la vraie protection est le réseau LAN.
-#[must_use]
 pub fn cors_layer() -> CorsLayer {
     use tower_http::cors::AllowOrigin;
     CorsLayer::new()

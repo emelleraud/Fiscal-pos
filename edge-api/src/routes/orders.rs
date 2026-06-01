@@ -1,4 +1,4 @@
-//! # routes::orders
+//! # `routes::orders`
 //!
 //! Routes de gestion des commandes et de l'enregistrement fiscal.
 //!
@@ -11,7 +11,7 @@
 //! ## Architecture fiscale
 //! Chaque route qui génère une opération fiscale appelle `journal.record_transaction()`
 //! de manière **synchrone et transactionnelle**. Toute erreur du fiscal-engine est
-//! bloquante — la réponse HTTP n'est envoyée qu'après confirmation de l'écriture SQLite.
+//! bloquante — la réponse HTTP n'est envoyée qu'après confirmation de l'écriture `SQLite`.
 //!
 //! ## Modèle de commande simplifié
 //! À ce stade MVP, une commande = une ligne fiscale unique.
@@ -80,7 +80,8 @@ pub struct CreateOrderRequest {
 /// Corps de la requête de validation de paiement.
 #[derive(Debug, Deserialize)]
 pub struct PayOrderRequest {
-    /// Moyen de paiement effectivement utilisé.
+    /// Moyen de paiement effectivement utilisé (conservé pour la désérialisation JSON).
+    #[allow(dead_code)]
     pub payment_method: PaymentMethod,
     /// Montant encaissé en centimes (peut différer si rendu monnaie espèces).
     pub amount_paid_cents: i64,
@@ -227,7 +228,6 @@ impl From<&FiscalEntry> for FiscalEntryResponse {
             tva_cents: e.tva_breakdown.tva_cents.0,
             tva_rate: match e.tva_breakdown.rate {
                 TvaRate::Reduit5_5 => "5.5".to_string(),
-                TvaRate::Intermediaire10 => "10".to_string(),
                 TvaRate::Normal20 => "20".to_string(),
                 _ => "10".to_string(),
             },
@@ -247,7 +247,7 @@ impl From<&FiscalEntry> for FiscalEntryResponse {
 // Helpers promo-engine
 // ---------------------------------------------------------------------------
 
-/// Ligne brute lue depuis la table SQLite `promotions`.
+/// Ligne brute lue depuis la table `SQLite` `promotions`.
 struct SqlitePromoRow {
     id: String,
     name: String,
@@ -337,6 +337,14 @@ impl TryFrom<SqlitePromoRow> for Promotion {
     }
 }
 
+/// Données d'une entrée DISCOUNT pré-validée, en attente d'enregistrement.
+struct DiscountEntry {
+    data: FiscalEntryData,
+    promo_id: String,
+    promo_name: String,
+    discount_cents: i64,
+}
+
 /// Convertit un `TvaRateRequest` vers le type `TvaRateKey` du promo-engine.
 fn tva_rate_request_to_key(r: TvaRateRequest) -> TvaRateKey {
     match r {
@@ -376,6 +384,7 @@ fn tva_rate_request_to_key(r: TvaRateRequest) -> TvaRateKey {
 /// - `409` si aucune session n'est ouverte
 /// - `422` si le montant ou la TVA est invalide
 /// - `500` si le fiscal-engine échoue (bloquant)
+#[allow(clippy::too_many_lines)]
 pub async fn create_order_handler(
     State(state): State<AppState>,
     Json(body): Json<CreateOrderRequest>,
@@ -501,13 +510,6 @@ pub async fn create_order_handler(
     // AVANT d'enregistrer la VENTE — garantit la cohérence du journal.
     // (NF525 : si une remise est invalide, la vente ne doit pas être commitée)
     // -----------------------------------------------------------------------
-    struct DiscountEntry {
-        data: FiscalEntryData,
-        promo_id: String,
-        promo_name: String,
-        discount_cents: i64,
-    }
-
     let mut pending_discounts: Vec<DiscountEntry> = Vec::new();
 
     for app in &eval.applied {
@@ -638,16 +640,8 @@ pub async fn pay_order_handler(
     // au moment de POST /orders. Ce callback confirme uniquement le paiement
     // côté UI et calcule le rendu monnaie pour les espèces.
 
-    let change_cents = match body.payment_method {
-        PaymentMethod::Cash => {
-            // Rendu monnaie uniquement pour les espèces
-            // Le montant de la commande original serait récupéré depuis un cache
-            // En MVP, on le calcule depuis amount_paid - amount_ttc
-            // (le frontend envoie le montant TTC dans amount_paid pour CB)
-            0_i64 // Simplifié : le frontend calcule et affiche le rendu
-        }
-        _ => 0,
-    };
+    // Rendu monnaie simplifié : le frontend calcule et affiche le rendu
+    let change_cents: i64 = 0;
 
     // Valider que le paiement est suffisant (pour espèces)
     if body.amount_paid_cents < 0 {
@@ -854,5 +848,7 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_millis() as u64
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }

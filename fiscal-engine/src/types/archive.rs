@@ -23,7 +23,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Sérialise un tableau de 64 octets en string hexadécimale.
 fn serialize_bytes64<S: Serializer>(bytes: &[u8; 64], s: S) -> Result<S::Ok, S::Error> {
-    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    use std::fmt::Write as _;
+    let hex = bytes.iter().fold(String::with_capacity(128), |mut acc, b| {
+        write!(acc, "{b:02x}").expect("writing to String is infallible");
+        acc
+    });
     s.serialize_str(&hex)
 }
 

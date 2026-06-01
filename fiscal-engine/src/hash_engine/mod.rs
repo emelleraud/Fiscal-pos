@@ -1,4 +1,4 @@
-//! # hash_engine
+//! # `hash_engine`
 //!
 //! Moteur de hash SHA-256 chaîné pour la certification NF525.
 //!
@@ -345,15 +345,12 @@ pub fn verify_chain_integrity(entries: &[FiscalEntry]) -> Result<IntegrityReport
         }
 
         // --- Vérification 3 : hash recalculé ---
-        match verify_entry_hash(entry, &previous_hash) {
-            Ok(()) => {}
-            Err(_) => {
-                if first_failed_sequence.is_none() {
-                    first_failed_sequence = Some(entry.sequence_number);
-                }
-                total_failures += 1;
-                // On continue même après erreur
+        if let Ok(()) = verify_entry_hash(entry, &previous_hash) {} else {
+            if first_failed_sequence.is_none() {
+                first_failed_sequence = Some(entry.sequence_number);
             }
+            total_failures += 1;
+            // On continue même après erreur
         }
 
         previous_hash = entry.hash;
@@ -396,8 +393,9 @@ pub fn verify_chain_integrity(entries: &[FiscalEntry]) -> Result<IntegrityReport
 /// ```
 #[must_use]
 pub fn hex_encode(bytes: &[u8; 32]) -> String {
+    use std::fmt::Write as _;
     bytes.iter().fold(String::with_capacity(64), |mut acc, b| {
-        acc.push_str(&format!("{b:02x}"));
+        write!(acc, "{b:02x}").expect("writing to String is infallible");
         acc
     })
 }
@@ -423,8 +421,8 @@ pub fn hex_decode(hex: &str) -> Result<[u8; 32], HashError> {
 
     let mut result = [0u8; 32];
     for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-        let high = hex_char_to_nibble(chunk[0]).map_err(|_| HashError::InvalidHashSize { received: 0 })?;
-        let low = hex_char_to_nibble(chunk[1]).map_err(|_| HashError::InvalidHashSize { received: 0 })?;
+        let high = hex_char_to_nibble(chunk[0]).map_err(|()| HashError::InvalidHashSize { received: 0 })?;
+        let low = hex_char_to_nibble(chunk[1]).map_err(|()| HashError::InvalidHashSize { received: 0 })?;
         result[i] = (high << 4) | low;
     }
     Ok(result)

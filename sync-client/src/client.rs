@@ -3,7 +3,7 @@
 //! Client HTTP pour l'API REST Supabase.
 //!
 //! ## Protocole Supabase REST
-//! Supabase expose une API REST auto-générée (PostgREST).
+//! Supabase expose une API REST auto-générée (`PostgREST`).
 //! Les opérations utilisées par le sync-client :
 //!
 //! | Opération | Méthode | Endpoint                        | Headers spéciaux                    |
@@ -14,7 +14,7 @@
 //! ## Idempotence
 //! `Prefer: resolution=ignore-duplicates` sur le POST garantit qu'un batch
 //! déjà reçu est ignoré (pas de doublon). L'UUID v7 de chaque entrée est
-//! la clé de déduplication côté PostgreSQL.
+//! la clé de déduplication côté `PostgreSQL`.
 //!
 //! ## Authentification
 //! Toutes les requêtes portent :
@@ -35,7 +35,7 @@ use crate::{
 
 /// Client HTTP pour l'API Supabase REST.
 ///
-/// Thread-safe et clonable (reqwest::Client utilise un Arc interne).
+/// Thread-safe et clonable (`reqwest::Client` utilise un Arc interne).
 #[derive(Debug, Clone)]
 pub struct SupabaseClient {
     client: Client,
@@ -66,7 +66,7 @@ impl SupabaseClient {
         })
     }
 
-    /// Constructeur pour les tests — pointe vers un serveur HTTP local (wiremock, sans https_only).
+    /// Constructeur pour les tests — pointe vers un serveur HTTP local (wiremock, sans `https_only`).
     #[allow(dead_code)]
     pub fn new_for_test(base_url: &str, service_key: &str) -> Self {
         let client = Client::builder()
@@ -137,7 +137,7 @@ impl SupabaseClient {
                 .json()
                 .await
                 .unwrap_or(serde_json::json!([]));
-            let count = inserted_rows.as_array().map(|a| a.len() as u64).unwrap_or(0);
+            let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
             debug!(inserted = count, "Batch poussé avec succès");
             Ok(count)
         } else {
@@ -195,7 +195,7 @@ impl SupabaseClient {
                 .json()
                 .await
                 .unwrap_or(serde_json::json!([]));
-            let count = inserted_rows.as_array().map(|a| a.len() as u64).unwrap_or(0);
+            let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
             debug!(inserted = count, "Sessions poussées avec succès");
             Ok(count)
         } else {
@@ -249,7 +249,7 @@ impl SupabaseClient {
                 .json()
                 .await
                 .unwrap_or(serde_json::json!([]));
-            let count = inserted_rows.as_array().map(|a| a.len() as u64).unwrap_or(0);
+            let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
             debug!(inserted = count, "Z-reports poussés avec succès");
             Ok(count)
         } else {

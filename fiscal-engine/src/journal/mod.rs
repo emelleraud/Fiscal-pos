@@ -6,7 +6,7 @@
 //! Le `Journal` est le seul point d'entrée pour toute opération fiscale.
 //! Il orchestre :
 //! 1. La validation des données métier (`FiscalEntryData::validate()`)
-//! 2. Le calcul du numéro de séquence (atomic via SQLite)
+//! 2. Le calcul du numéro de séquence (atomic via `SQLite`)
 //! 3. Le calcul du hash chaîné (`hash_engine::compute_entry_hash()`)
 //! 4. La persistence transactionnelle (INSERT entrée + UPDATE session en une TX)
 //! 5. La vérification d'intégrité à la demande
@@ -91,19 +91,19 @@ use self::store::JournalStore;
 #[derive(Debug)]
 pub struct Journal {
     store: JournalStore,
-    /// Session courante en mémoire (cache — source de vérité : SQLite).
+    /// Session courante en mémoire (cache — source de vérité : `SQLite`).
     /// `None` si aucune session n'est active.
     active_session: Arc<Mutex<Option<Session>>>,
 }
 
 impl Journal {
-    /// Ouvre le journal sur une base SQLite existante.
+    /// Ouvre le journal sur une base `SQLite` existante.
     ///
     /// Charge la session active depuis la base si elle existe.
-    /// Lance les migrations SQLite si elles n'ont pas encore été appliquées.
+    /// Lance les migrations `SQLite` si elles n'ont pas encore été appliquées.
     ///
     /// # Arguments
-    /// * `pool` - Pool de connexions SQLite (WAL mode recommandé).
+    /// * `pool` - Pool de connexions `SQLite` (WAL mode recommandé).
     ///
     /// # Errors
     /// - `FiscalError::Database` si la base est inaccessible ou les migrations échouent
@@ -157,7 +157,7 @@ impl Journal {
     ///
     /// # Errors
     /// - `SessionError::SessionAlreadyActive` si une session est déjà ouverte
-    /// - `FiscalError::Database` sur erreur SQLite
+    /// - `FiscalError::Database` sur erreur `SQLite`
     ///
     /// # Examples
     /// ```no_run
@@ -219,7 +219,7 @@ impl Journal {
     /// - `FiscalError::SessionClosed` si la session est fermée
     /// - `FiscalError::InvalidAmount` si le montant est incohérent
     /// - `FiscalError::InvalidTvaDecomposition` si la TVA est incohérente
-    /// - `FiscalError::Database` sur erreur SQLite (TX rollbackée automatiquement)
+    /// - `FiscalError::Database` sur erreur `SQLite` (TX rollbackée automatiquement)
     ///
     /// # Examples
     /// ```no_run
@@ -344,7 +344,7 @@ impl Journal {
     ///
     /// # Errors
     /// - `SessionError::NoActiveSession` si aucune session n'est ouverte
-    /// - `FiscalError::Database` sur erreur SQLite
+    /// - `FiscalError::Database` sur erreur `SQLite`
     pub async fn close_session(&self) -> Result<[u8; 32], FiscalError> {
         let mut session_guard = self.active_session.lock().await;
         let session = session_guard
@@ -404,7 +404,7 @@ impl Journal {
 
     /// Vérifie l'intégrité de la chaîne de hash du journal complet.
     ///
-    /// Relit toutes les entrées depuis SQLite et vérifie :
+    /// Relit toutes les entrées depuis `SQLite` et vérifie :
     /// - La continuité de la séquence
     /// - Le hash genesis de la première entrée
     /// - La cohérence de chaque hash avec son précédent
@@ -414,7 +414,7 @@ impl Journal {
     /// # Errors
     /// - `IntegrityError::EmptyJournal` si le journal est vide
     /// - `IntegrityError::*` pour toute violation de la chaîne
-    /// - `FiscalError::Database` sur erreur SQLite
+    /// - `FiscalError::Database` sur erreur `SQLite`
     ///
     /// # Examples
     /// ```no_run
@@ -447,6 +447,7 @@ impl Journal {
     /// Accès au store sous-jacent (pour les opérations avancées : sync, archivage).
     ///
     /// Utilisé par `sync-client` et par le générateur de rapport Z (Étape 5).
+    #[must_use] 
     pub fn store(&self) -> &JournalStore {
         &self.store
     }
@@ -490,7 +491,9 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_millis() as u64
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 // ---------------------------------------------------------------------------

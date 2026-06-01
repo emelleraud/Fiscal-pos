@@ -6,15 +6,15 @@
 //!
 //! | Méthode | Chemin                          | Handler                    | Niveau d'accès |
 //! |---------|----------------------------------|----------------------------|----------------|
-//! | GET     | /api/v1/health                   | health_handler             | Public LAN     |
-//! | GET     | /api/v1/menu                     | menu_handler               | Public LAN     |
-//! | GET     | /api/v1/sessions/current         | get_current_session_handler| Caisse         |
-//! | POST    | /api/v1/sessions/open            | open_session_handler       | Caisse         |
-//! | POST    | /api/v1/sessions/close           | close_session_handler      | Manager        |
-//! | POST    | /api/v1/orders                   | create_order_handler       | Caisse         |
-//! | GET     | /api/v1/orders/:id               | get_order_handler          | Caisse         |
-//! | POST    | /api/v1/orders/:id/pay           | pay_order_handler          | Caisse/TPE     |
-//! | POST    | /api/v1/orders/:id/cancel        | cancel_order_handler       | Manager        |
+//! | GET     | /api/v1/health                   | `health_handler`             | Public LAN     |
+//! | GET     | /api/v1/menu                     | `menu_handler`               | Public LAN     |
+//! | GET     | /api/v1/sessions/current         | `get_current_session_handler`| Caisse         |
+//! | POST    | /api/v1/sessions/open            | `open_session_handler`       | Caisse         |
+//! | POST    | /api/v1/sessions/close           | `close_session_handler`      | Manager        |
+//! | POST    | /api/v1/orders                   | `create_order_handler`       | Caisse         |
+//! | GET     | /api/v1/orders/:id               | `get_order_handler`          | Caisse         |
+//! | POST    | /api/v1/orders/:id/pay           | `pay_order_handler`          | Caisse/TPE     |
+//! | POST    | /api/v1/orders/:id/cancel        | `cancel_order_handler`       | Manager        |
 //!
 //! ## Niveau d'accès
 //! Toutes les routes sont exposées sur le LAN uniquement (pas d'Internet).
@@ -33,7 +33,6 @@ use axum::{routing::{get, post}, Router};
 use crate::app::AppState;
 
 /// Construit le routeur Axum complet avec toutes les routes de l'API.
-#[must_use]
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         // --- Health ---

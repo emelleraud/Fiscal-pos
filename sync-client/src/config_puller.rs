@@ -1,4 +1,4 @@
-//! # config_puller
+//! # `config_puller`
 //!
 //! Réception et application de la configuration cloud (menu, prix, promotions).
 //!
@@ -37,12 +37,9 @@ pub async fn pull_and_apply_config(
     client: &SupabaseClient,
     config: &SyncConfig,
 ) -> Result<bool, SyncError> {
-    let remote = match client.pull_config(&config.site_id).await? {
-        Some(r) => r,
-        None => {
-            debug!("Aucune configuration disponible pour le site {}", config.site_id);
-            return Ok(false);
-        }
+    let Some(remote) = client.pull_config(&config.site_id).await? else {
+        debug!("Aucune configuration disponible pour le site {}", config.site_id);
+        return Ok(false);
     };
 
     // Vérifier si c'est une nouvelle version
@@ -75,19 +72,12 @@ pub async fn pull_and_apply_config(
 /// Retourne 0 si le fichier est absent ou invalide.
 fn read_local_version(data_dir: &str) -> u32 {
     let path = format!("{data_dir}/menu.json");
-    let content = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(_) => return 0,
-    };
-    let value: serde_json::Value = match serde_json::from_str(&content) {
-        Ok(v) => v,
-        Err(_) => return 0,
-    };
+    let Ok(content) = std::fs::read_to_string(&path) else { return 0 };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else { return 0 };
     value
         .get("version")
-        .and_then(|v| v.as_u64())
-        .map(|v| v as u32)
-        .unwrap_or(0)
+        .and_then(serde_json::Value::as_u64)
+        .map_or(0, |v| u32::try_from(v).unwrap_or(0))
 }
 
 /// Écrit la nouvelle configuration sur disque de manière atomique.

@@ -1,4 +1,4 @@
-//! # z_report_engine
+//! # `z_report_engine`
 //!
 //! Génération du rapport Z de clôture de session (NF525 §6).
 //!
@@ -48,20 +48,20 @@ use common::{Cents, SessionId};
 /// ## Algorithme
 /// 1. Charger la session et vérifier son statut
 /// 2. Vérifier qu'aucun rapport Z n'existe déjà (idempotence)
-/// 3. Charger toutes les entrées de la session depuis SQLite
+/// 3. Charger toutes les entrées de la session depuis `SQLite`
 /// 4. Agréger les totaux par type d'opération
 /// 5. Décomposer la TVA par taux
 /// 6. Construire le `ZReport`
 /// 7. Persister le rapport en base
 ///
 /// # Arguments
-/// * `pool` - Pool SQLite partagée avec le journal.
+/// * `pool` - Pool `SQLite` partagée avec le journal.
 /// * `session_id` - Session à clôturer.
 ///
 /// # Errors
 /// - `SessionError::NoActiveSession` si la session est introuvable
 /// - `SessionError::ZReportAlreadyGenerated` si un rapport Z existe déjà
-/// - `FiscalError::Database` sur erreur SQLite
+/// - `FiscalError::Database` sur erreur `SQLite`
 ///
 /// # Examples
 /// ```no_run
@@ -129,18 +129,18 @@ pub async fn generate_z_report(
     // 4 & 5. Agréger les totaux et décomposer la TVA
     let aggregated = aggregate_entries(&entries);
 
-    let first_entry_sequence = entries.first().map(|e| e.sequence_number).unwrap_or(1);
-    let last_entry_sequence = entries.last().map(|e| e.sequence_number).unwrap_or(1);
+    let first_entry_sequence = entries.first().map_or(1, |e| e.sequence_number);
+    let last_entry_sequence = entries.last().map_or(1, |e| e.sequence_number);
 
     // 6. Construire le rapport Z
     let report = ZReport {
         id: Uuid::now_v7(),
         session_id,
-        session_sequence_number: session_sequence_number as u64,
+        session_sequence_number: session_sequence_number.cast_unsigned(),
         generated_at_ms: now_ms(),
         first_entry_sequence,
         last_entry_sequence,
-        entry_count: entries.len() as u64,
+        entry_count: u64::try_from(entries.len()).unwrap_or(u64::MAX),
         total_sales_cents: aggregated.total_sales,
         total_refunds_cents: aggregated.total_refunds,
         total_cancels_cents: aggregated.total_cancels,
@@ -157,10 +157,10 @@ pub async fn generate_z_report(
     Ok(report)
 }
 
-/// Charge un rapport Z existant depuis la base, par session_id.
+/// Charge un rapport Z existant depuis la base, par `session_id`.
 ///
 /// # Errors
-/// - `FiscalError::Database` sur erreur SQLite
+/// - `FiscalError::Database` sur erreur `SQLite`
 pub async fn load_z_report(
     pool: &SqlitePool,
     session_id: SessionId,
@@ -207,7 +207,7 @@ struct AggregatedTotals {
 /// Les remboursements/annulations/remises ont des montants négatifs et
 /// sont exécutés **en valeur absolue** pour les totaux du rapport Z.
 ///
-/// ## Entrées ZClose
+/// ## Entrées `ZClose`
 /// L'entrée `ZClose` (montant 0) n'impacte aucun total financier.
 fn aggregate_entries(entries: &[FiscalEntry]) -> AggregatedTotals {
     let mut total_sales = Cents::ZERO;
@@ -307,11 +307,11 @@ async fn persist_z_report(pool: &SqlitePool, report: &ZReport) -> Result<(), Fis
     )
     .bind(report.id.to_string())
     .bind(report.session_id.0.to_string())
-    .bind(report.session_sequence_number as i64)
-    .bind(report.generated_at_ms as i64)
-    .bind(report.first_entry_sequence as i64)
-    .bind(report.last_entry_sequence as i64)
-    .bind(report.entry_count as i64)
+    .bind(report.session_sequence_number.cast_signed())
+    .bind(report.generated_at_ms.cast_signed())
+    .bind(report.first_entry_sequence.cast_signed())
+    .bind(report.last_entry_sequence.cast_signed())
+    .bind(report.entry_count.cast_signed())
     .bind(report.total_sales_cents.0)
     .bind(report.total_refunds_cents.0)
     .bind(report.total_cancels_cents.0)
@@ -354,11 +354,11 @@ fn z_report_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<ZReport, FiscalErr
     Ok(ZReport {
         id,
         session_id: SessionId(session_uuid),
-        session_sequence_number: { let n: i64 = row.try_get("session_sequence_number")?; n as u64 },
-        generated_at_ms: { let t: i64 = row.try_get("generated_at_ms")?; t as u64 },
-        first_entry_sequence: { let n: i64 = row.try_get("first_entry_sequence")?; n as u64 },
-        last_entry_sequence: { let n: i64 = row.try_get("last_entry_sequence")?; n as u64 },
-        entry_count: { let n: i64 = row.try_get("entry_count")?; n as u64 },
+        session_sequence_number: { let n: i64 = row.try_get("session_sequence_number")?; n.cast_unsigned() },
+        generated_at_ms: { let t: i64 = row.try_get("generated_at_ms")?; t.cast_unsigned() },
+        first_entry_sequence: { let n: i64 = row.try_get("first_entry_sequence")?; n.cast_unsigned() },
+        last_entry_sequence: { let n: i64 = row.try_get("last_entry_sequence")?; n.cast_unsigned() },
+        entry_count: { let n: i64 = row.try_get("entry_count")?; n.cast_unsigned() },
         total_sales_cents:    Cents(row.try_get("total_sales_cents")?),
         total_refunds_cents:  Cents(row.try_get("total_refunds_cents")?),
         total_cancels_cents:  Cents(row.try_get("total_cancels_cents")?),
@@ -407,7 +407,9 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_millis() as u64
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 // ---------------------------------------------------------------------------

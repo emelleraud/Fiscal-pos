@@ -79,7 +79,7 @@ pub enum FiscalError {
         ttc_cents: i64,
     },
 
-    /// Erreur de persistence (SQLite). Encapsule `sqlx::Error`.
+    /// Erreur de persistence (`SQLite`). Encapsule `sqlx::Error`.
     #[error("Erreur de persistence : {0}")]
     Database(#[from] sqlx::Error),
 }

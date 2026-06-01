@@ -1,4 +1,4 @@
-//! # z_report
+//! # `z_report`
 //!
 //! Rapport Z : document fiscal de clôture de session de caisse.
 //!
@@ -164,7 +164,7 @@ impl ZReport {
     /// Contrôles effectués :
     /// 1. `total_ht + total_tva ≈ total_sales` (à 1 centime d'arrondi près)
     /// 2. `first_entry_sequence <= last_entry_sequence`
-    /// 3. `entry_count >= 1` (au moins l'entrée ZClose)
+    /// 3. `entry_count >= 1` (au moins l'entrée `ZClose`)
     ///
     /// # Errors
     /// Retourne une description de l'incohérence détectée.

@@ -26,7 +26,7 @@ use super::{operation::OperationType, tva::TvaBreakdown};
 ///
 /// # Immuabilité
 /// Une fois créé, un `FiscalEntry` ne doit jamais être modifié.
-/// Le journal le stocke en append-only (SQLite sans UPDATE ni DELETE sur cette table).
+/// Le journal le stocke en append-only (`SQLite` sans UPDATE ni DELETE sur cette table).
 ///
 /// # Examples
 /// ```

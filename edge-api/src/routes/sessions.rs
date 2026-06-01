@@ -1,4 +1,4 @@
-//! # routes::sessions
+//! # `routes::sessions`
 //!
 //! Routes de gestion des sessions de caisse.
 //!

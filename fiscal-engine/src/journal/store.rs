@@ -1,19 +1,19 @@
 //! # store
 //!
-//! Couche d'accès SQLite pour le journal fiscal.
+//! Couche d'accès `SQLite` pour le journal fiscal.
 //!
 //! ## Pattern utilisé : Repository
 //! Ce module isole complètement toute logique SQL du domaine fiscal.
 //! Le `JournalStore` est le seul endroit du crate qui émet des requêtes SQL.
 //! Le `Journal` (dans `mod.rs`) appelle le store et applique les règles métier.
 //!
-//! ## Contraintes SQLite
+//! ## Contraintes `SQLite`
 //! - Mode WAL activé à la connexion (lecture concurrente pendant les writes)
 //! - `PRAGMA foreign_keys = ON` activé à chaque connexion
 //! - `PRAGMA journal_mode = WAL` et `PRAGMA synchronous = FULL`
 //!   garantissent la durabilité même sur crash brutal (FSYNC avant ACK)
-//! - Toutes les opérations critiques (INSERT fiscal_entry + UPDATE session)
-//!   sont dans une transaction SQLite explicite
+//! - Toutes les opérations critiques (INSERT `fiscal_entry` + UPDATE session)
+//!   sont dans une transaction `SQLite` explicite
 //!
 //! ## Append-only au niveau SQL
 //! Ce module ne contient aucun `UPDATE fiscal_entries` ni `DELETE FROM fiscal_entries`.
@@ -39,21 +39,21 @@ use common::{Cents, FiscalEntryId, SessionId};
 // Store principal
 // ---------------------------------------------------------------------------
 
-/// Repository SQLite pour le journal fiscal.
+/// Repository `SQLite` pour le journal fiscal.
 ///
 /// Toutes les interactions avec la base de données passent par cette structure.
 /// La pool de connexions est partagée (Clone est peu coûteux — pool interne Arc).
 #[derive(Debug, Clone)]
 pub struct JournalStore {
-    /// Pool de connexions SQLite partagée.
+    /// Pool de connexions `SQLite` partagée.
     pub pool: SqlitePool,
 }
 
 impl JournalStore {
-    /// Crée un nouveau store et initialise les PRAGMAs SQLite.
+    /// Crée un nouveau store et initialise les PRAGMAs `SQLite`.
     ///
     /// # Arguments
-    /// * `pool` - Pool de connexions SQLite déjà configurée.
+    /// * `pool` - Pool de connexions `SQLite` déjà configurée.
     ///
     /// # Errors
     /// Retourne `FiscalError::Database` si les PRAGMAs échouent.
@@ -73,7 +73,7 @@ impl JournalStore {
         Ok(Self { pool })
     }
 
-    /// Exécute les migrations SQLite depuis le répertoire `migrations/`.
+    /// Exécute les migrations `SQLite` depuis le répertoire `migrations/`.
     ///
     /// Idempotent : les migrations déjà appliquées sont ignorées grâce à
     /// la table `_applied_migrations` qui trace chaque version appliquée.
@@ -155,7 +155,7 @@ impl JournalStore {
     /// NF525 §4.1 : une seule session peut être ouverte à la fois.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_active_session(&self) -> Result<Option<Session>, FiscalError> {
         let row = sqlx::query(
             "SELECT id, sequence_number, status, opened_at_ms, closed_at_ms, closing_hash,
@@ -174,7 +174,7 @@ impl JournalStore {
     /// Charge une session par son identifiant.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_session_by_id(
         &self,
         session_id: SessionId,
@@ -198,13 +198,13 @@ impl JournalStore {
     /// `MAX(sequence_number) + 1`, ou 1 si aucune session n'existe encore.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn next_session_sequence(&self) -> Result<u64, FiscalError> {
         let row = sqlx::query("SELECT COALESCE(MAX(sequence_number), 0) + 1 AS next FROM sessions")
             .fetch_one(&self.pool)
             .await?;
         let next: i64 = row.try_get("next")?;
-        Ok(next as u64)
+        Ok(next.cast_unsigned())
     }
 
     // -----------------------------------------------------------------------
@@ -214,7 +214,7 @@ impl JournalStore {
     /// Insère une nouvelle session dans la base.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite ou violation de contrainte unique.
+    /// `FiscalError::Database` sur erreur `SQLite` ou violation de contrainte unique.
     pub async fn insert_session(&self, session: &Session) -> Result<(), FiscalError> {
         sqlx::query(
             "INSERT INTO sessions
@@ -224,16 +224,16 @@ impl JournalStore {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(session.id.0.to_string())
-        .bind(session.sequence_number as i64)
+        .bind(session.sequence_number.cast_signed())
         .bind(session_status_to_str(session.status))
-        .bind(session.opened_at_ms as i64)
-        .bind(session.closed_at_ms.map(|t| t as i64))
-        .bind(session.closing_hash.as_ref().map(|h| h.as_ref()))
+        .bind(session.opened_at_ms.cast_signed())
+        .bind(session.closed_at_ms.map(u64::cast_signed))
+        .bind(session.closing_hash.as_ref().map(std::convert::AsRef::as_ref))
         .bind(session.total_sales_cents.0)
         .bind(session.total_refunds_cents.0)
         .bind(session.total_cancels_cents.0)
         .bind(session.total_discounts_cents.0)
-        .bind(session.entry_count as i64)
+        .bind(session.entry_count.cast_signed())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -245,7 +245,7 @@ impl JournalStore {
     /// C'est le **seul** `UPDATE sessions` autorisé dans ce module.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn update_session_totals(
         &self,
         session: &Session,
@@ -264,17 +264,17 @@ impl JournalStore {
         .bind(session.total_refunds_cents.0)
         .bind(session.total_cancels_cents.0)
         .bind(session.total_discounts_cents.0)
-        .bind(session.entry_count as i64)
+        .bind(session.entry_count.cast_signed())
         .bind(session.id.0.to_string())
         .execute(tx.as_mut())
         .await?;
         Ok(())
     }
 
-    /// Clôture une session : met à jour status, closed_at_ms et closing_hash.
+    /// Clôture une session : met à jour status, `closed_at_ms` et `closing_hash`.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn close_session(
         &self,
         session: &Session,
@@ -292,13 +292,13 @@ impl JournalStore {
                 entry_count           = ?
              WHERE id = ?",
         )
-        .bind(session.closed_at_ms.map(|t| t as i64))
-        .bind(session.closing_hash.as_ref().map(|h| h.as_ref()))
+        .bind(session.closed_at_ms.map(u64::cast_signed))
+        .bind(session.closing_hash.as_ref().map(std::convert::AsRef::as_ref))
         .bind(session.total_sales_cents.0)
         .bind(session.total_refunds_cents.0)
         .bind(session.total_cancels_cents.0)
         .bind(session.total_discounts_cents.0)
-        .bind(session.entry_count as i64)
+        .bind(session.entry_count.cast_signed())
         .bind(session.id.0.to_string())
         .execute(tx.as_mut())
         .await?;
@@ -314,14 +314,14 @@ impl JournalStore {
     /// `MAX(sequence_number) + 1`, ou 1 si le journal est vide.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn next_entry_sequence(&self) -> Result<u64, FiscalError> {
         let row =
             sqlx::query("SELECT COALESCE(MAX(sequence_number), 0) + 1 AS next FROM fiscal_entries")
                 .fetch_one(&self.pool)
                 .await?;
         let next: i64 = row.try_get("next")?;
-        Ok(next as u64)
+        Ok(next.cast_unsigned())
     }
 
     /// Retourne le hash de la dernière entrée du journal (pour chaîner la suivante).
@@ -329,7 +329,7 @@ impl JournalStore {
     /// Retourne `GENESIS_HASH` si le journal est vide.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn last_hash(&self) -> Result<[u8; 32], FiscalError> {
         let row = sqlx::query(
             "SELECT hash FROM fiscal_entries ORDER BY sequence_number DESC LIMIT 1",
@@ -353,7 +353,7 @@ impl JournalStore {
     /// Utilisé pour la vérification d'intégrité et la génération du rapport Z.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_entries_for_session(
         &self,
         session_id: SessionId,
@@ -384,7 +384,7 @@ impl JournalStore {
     /// Utilisé pour la vérification d'intégrité complète du journal.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_all_entries(&self) -> Result<Vec<FiscalEntry>, FiscalError> {
         let rows = sqlx::query(
             "SELECT id, sequence_number, session_id, operation_type,
@@ -412,7 +412,7 @@ impl JournalStore {
     /// * `limit` - Nombre maximum d'entrées à retourner (taille du batch).
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_unsynced_entries(
         &self,
         limit: u32,
@@ -429,7 +429,7 @@ impl JournalStore {
              ORDER BY sequence_number ASC
              LIMIT ?",
         )
-        .bind(limit as i64)
+        .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await?;
 
@@ -444,7 +444,7 @@ impl JournalStore {
     /// * `year` - Année civile (ex: 2024).
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_entries_for_year(
         &self,
         year: u32,
@@ -464,8 +464,8 @@ impl JournalStore {
              WHERE created_at_ms >= ? AND created_at_ms < ?
              ORDER BY sequence_number ASC",
         )
-        .bind(start_ms as i64)
-        .bind(end_ms as i64)
+        .bind(start_ms.cast_signed())
+        .bind(end_ms.cast_signed())
         .fetch_all(&self.pool)
         .await?;
 
@@ -487,7 +487,7 @@ impl JournalStore {
     /// pour garantir l'atomicité avec la mise à jour des totaux de session.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite ou violation de contrainte CHECK.
+    /// `FiscalError::Database` sur erreur `SQLite` ou violation de contrainte CHECK.
     pub async fn insert_entry(
         &self,
         entry: &FiscalEntry,
@@ -506,7 +506,7 @@ impl JournalStore {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
         )
         .bind(entry.id.0.to_string())
-        .bind(entry.sequence_number as i64)
+        .bind(entry.sequence_number.cast_signed())
         .bind(entry.session_id.0.to_string())
         .bind(operation_type_to_str(entry.operation_type))
         .bind(entry.amount_ttc_cents.0)
@@ -521,7 +521,7 @@ impl JournalStore {
         .bind(entry.tva_20_breakdown.tva_cents.0)
         .bind(entry.hash.as_ref())
         .bind(entry.previous_hash.as_ref())
-        .bind(entry.created_at_ms as i64)
+        .bind(entry.created_at_ms.cast_signed())
         .bind(entry.reason.as_deref())
         .bind(entry.order_reference.as_deref())
         .execute(tx.as_mut())
@@ -539,7 +539,7 @@ impl JournalStore {
     /// * `entry_ids` - Liste des UUID des entrées à marquer comme synchronisées.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn mark_entries_synced(&self, entry_ids: &[Uuid]) -> Result<u64, FiscalError> {
         if entry_ids.is_empty() {
             return Ok(0);
@@ -549,8 +549,8 @@ impl JournalStore {
         let placeholders: String = entry_ids
             .iter()
             .enumerate()
-            .map(|(i, _)| if i == 0 { "?".to_string() } else { ", ?".to_string() })
-            .collect();
+            .map(|(i, _)| if i == 0 { "?" } else { ", ?" })
+            .collect::<String>();
 
         let sql = format!("UPDATE fiscal_entries SET synced = 1 WHERE id IN ({placeholders})");
 
@@ -574,7 +574,7 @@ impl JournalStore {
     /// **avant** les `fiscal_entries` (contrainte FK côté cloud).
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_unsynced_sessions(&self) -> Result<Vec<Session>, FiscalError> {
         let rows = sqlx::query(
             "SELECT id, sequence_number, status, opened_at_ms, closed_at_ms, closing_hash,
@@ -601,7 +601,7 @@ impl JournalStore {
     /// * `session_ids` - Liste des UUID des sessions à marquer.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn mark_sessions_synced(&self, session_ids: &[Uuid]) -> Result<u64, FiscalError> {
         if session_ids.is_empty() {
             return Ok(0);
@@ -610,13 +610,15 @@ impl JournalStore {
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() as i64;
+            .as_millis()
+            .try_into()
+            .unwrap_or(i64::MAX);
 
         let placeholders: String = session_ids
             .iter()
             .enumerate()
-            .map(|(i, _)| if i == 0 { "?".to_string() } else { ", ?".to_string() })
-            .collect();
+            .map(|(i, _)| if i == 0 { "?" } else { ", ?" })
+            .collect::<String>();
 
         let sql = format!(
             "UPDATE sessions SET synced = 1, synced_at = ? WHERE id IN ({placeholders})"
@@ -637,11 +639,11 @@ impl JournalStore {
 
     /// Charge les rapports Z non synchronisés, triés par `session_sequence_number` croissant.
     ///
-    /// Utilisé par `sync-client` pour pousser les z_reports vers Supabase
-    /// **après** les sessions (FK session_id côté cloud).
+    /// Utilisé par `sync-client` pour pousser les `z_reports` vers Supabase
+    /// **après** les sessions (FK `session_id` côté cloud).
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn load_unsynced_z_reports(&self) -> Result<Vec<ZReport>, FiscalError> {
         let rows = sqlx::query(
             "SELECT id, session_id, session_sequence_number, generated_at_ms,
@@ -669,7 +671,7 @@ impl JournalStore {
     /// * `report_ids` - Liste des UUID des rapports Z à marquer.
     ///
     /// # Errors
-    /// `FiscalError::Database` sur erreur SQLite.
+    /// `FiscalError::Database` sur erreur `SQLite`.
     pub async fn mark_z_reports_synced(&self, report_ids: &[Uuid]) -> Result<u64, FiscalError> {
         if report_ids.is_empty() {
             return Ok(0);
@@ -678,13 +680,15 @@ impl JournalStore {
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() as i64;
+            .as_millis()
+            .try_into()
+            .unwrap_or(i64::MAX);
 
         let placeholders: String = report_ids
             .iter()
             .enumerate()
-            .map(|(i, _)| if i == 0 { "?".to_string() } else { ", ?".to_string() })
-            .collect();
+            .map(|(i, _)| if i == 0 { "?" } else { ", ?" })
+            .collect::<String>();
 
         let sql = format!(
             "UPDATE z_reports SET synced = 1, synced_at = ? WHERE id IN ({placeholders})"
@@ -703,7 +707,7 @@ impl JournalStore {
     // Transactions SQLite explicites
     // -----------------------------------------------------------------------
 
-    /// Démarre une transaction SQLite.
+    /// Démarre une transaction `SQLite`.
     ///
     /// À utiliser pour les opérations qui modifient à la fois `fiscal_entries`
     /// et `sessions` (garantit l'atomicité).
@@ -716,7 +720,7 @@ impl JournalStore {
         Ok(self.pool.begin().await?)
     }
 
-    /// Accès direct à la pool SQLite — pour healthcheck et opérations avancées.
+    /// Accès direct à la pool `SQLite` — pour healthcheck et opérations avancées.
     ///
     /// # Safety
     /// La pool est en lecture-écriture. À utiliser avec précaution.
@@ -789,7 +793,7 @@ fn str_to_session_status(s: &str) -> Result<SessionStatus, FiscalError> {
     }
 }
 
-/// Construit un `Session` depuis une ligne SQLite.
+/// Construit un `Session` depuis une ligne `SQLite`.
 fn session_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Session, FiscalError> {
     let id_str: String = row.try_get("id")?;
     let id = Uuid::parse_str(&id_str).map_err(|e| {
@@ -810,16 +814,16 @@ fn session_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Session, FiscalErro
         id: SessionId(id),
         sequence_number: {
             let n: i64 = row.try_get("sequence_number")?;
-            n as u64
+            n.cast_unsigned()
         },
         status,
         opened_at_ms: {
             let t: i64 = row.try_get("opened_at_ms")?;
-            t as u64
+            t.cast_unsigned()
         },
         closed_at_ms: {
             let t: Option<i64> = row.try_get("closed_at_ms")?;
-            t.map(|v| v as u64)
+            t.map(i64::cast_unsigned)
         },
         closing_hash: closing_hash_arr,
         total_sales_cents: Cents(row.try_get("total_sales_cents")?),
@@ -828,12 +832,12 @@ fn session_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Session, FiscalErro
         total_discounts_cents: Cents(row.try_get("total_discounts_cents")?),
         entry_count: {
             let n: i64 = row.try_get("entry_count")?;
-            n as u64
+            n.cast_unsigned()
         },
     })
 }
 
-/// Construit un `FiscalEntry` depuis une ligne SQLite.
+/// Construit un `FiscalEntry` depuis une ligne `SQLite`.
 fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalError> {
     let id_str: String = row.try_get("id")?;
     let id = Uuid::parse_str(&id_str).map_err(|e| {
@@ -903,7 +907,7 @@ fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalEr
         id: FiscalEntryId(id),
         sequence_number: {
             let n: i64 = row.try_get("sequence_number")?;
-            n as u64
+            n.cast_unsigned()
         },
         session_id: SessionId(session_id),
         operation_type,
@@ -918,7 +922,7 @@ fn entry_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<FiscalEntry, FiscalEr
         previous_hash,
         created_at_ms: {
             let t: i64 = row.try_get("created_at_ms")?;
-            t as u64
+            t.cast_unsigned()
         },
         synced: synced_int != 0,
     })
@@ -942,11 +946,11 @@ fn z_report_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<ZReport, FiscalErr
     Ok(ZReport {
         id,
         session_id: SessionId(session_uuid),
-        session_sequence_number: { let n: i64 = row.try_get("session_sequence_number")?; n as u64 },
-        generated_at_ms: { let t: i64 = row.try_get("generated_at_ms")?; t as u64 },
-        first_entry_sequence: { let n: i64 = row.try_get("first_entry_sequence")?; n as u64 },
-        last_entry_sequence:  { let n: i64 = row.try_get("last_entry_sequence")?;  n as u64 },
-        entry_count:          { let n: i64 = row.try_get("entry_count")?;          n as u64 },
+        session_sequence_number: { let n: i64 = row.try_get("session_sequence_number")?; n.cast_unsigned() },
+        generated_at_ms: { let t: i64 = row.try_get("generated_at_ms")?; t.cast_unsigned() },
+        first_entry_sequence: { let n: i64 = row.try_get("first_entry_sequence")?; n.cast_unsigned() },
+        last_entry_sequence:  { let n: i64 = row.try_get("last_entry_sequence")?;  n.cast_unsigned() },
+        entry_count:          { let n: i64 = row.try_get("entry_count")?;          n.cast_unsigned() },
         total_sales_cents:    Cents(row.try_get("total_sales_cents")?),
         total_refunds_cents:  Cents(row.try_get("total_refunds_cents")?),
         total_cancels_cents:  Cents(row.try_get("total_cancels_cents")?),
@@ -988,7 +992,7 @@ fn year_start_ms(year: u32) -> u64 {
 }
 
 fn is_leap_year(year: u32) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 // ---------------------------------------------------------------------------

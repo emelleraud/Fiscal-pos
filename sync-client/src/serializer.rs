@@ -3,7 +3,7 @@
 //! Conversion des types `fiscal-engine` en payload JSON pour l'API Supabase.
 //!
 //! ## Format du payload
-//! Supabase expose une API REST auto-générée depuis le schéma PostgreSQL.
+//! Supabase expose une API REST auto-générée depuis le schéma `PostgreSQL`.
 //! Le push d'entrées utilise `POST /rest/v1/fiscal_entries` avec
 //! `Prefer: resolution=ignore-duplicates` pour l'idempotence.
 //!
@@ -40,35 +40,25 @@ use fiscal_engine::{hex_encode, types::tva::TvaRate, types::z_report::ZReport, F
 // ---------------------------------------------------------------------------
 
 /// Convertit un timestamp en millisecondes Unix en chaîne ISO 8601 UTC.
-/// Format attendu par PostgreSQL `timestamptz` via l'API REST Supabase.
+/// Format attendu par `PostgreSQL` `timestamptz` via l'API REST Supabase.
 fn ms_to_iso8601(ms: u64) -> String {
-    let secs = (ms / 1_000) as i64;
-    let nanos = ((ms % 1_000) * 1_000_000) as u32;
-    // Formatage manuel ISO 8601 sans dépendance chrono
-    // Utilise time crate déjà présent dans le workspace via sqlx
-    let dt = std::time::UNIX_EPOCH + std::time::Duration::new(secs as u64, nanos);
-    let secs_since_epoch = dt
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    // Décomposition manuelle en date/heure UTC
-    let s = secs_since_epoch;
-    let sec = s % 60;
-    let min = (s / 60) % 60;
-    let hour = (s / 3600) % 24;
-    let days = s / 86400;
-    // Calcul de l'année et du jour de l'année (algorithme de Fliegel-Van Flandern)
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    // Décomposition manuelle en date/heure UTC (algorithme de Fliegel-Van Flandern)
+    let secs = ms / 1_000;
+    let sec = secs % 60;
+    let min = (secs / 60) % 60;
+    let hour = (secs / 3_600) % 24;
+    let days = secs / 86_400;
+    let z = days + 719_468;
+    let era = z / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    format!("{y:04}-{m:02}-{d:02}T{hour:02}:{min:02}:{sec:02}Z")
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { y + 1 } else { y };
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +68,7 @@ fn ms_to_iso8601(ms: u64) -> String {
 /// Représentation JSON d'une `FiscalEntry` pour l'API Supabase REST.
 ///
 /// Les noms de champs correspondent **exactement** aux colonnes de la table
-/// `public.fiscal_entries` dans PostgreSQL (snake_case).
+/// `public.fiscal_entries` dans `PostgreSQL` (`snake_case`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FiscalEntryPayload {
     /// UUID de l'entrée (string).
@@ -158,7 +148,7 @@ impl FiscalEntryPayload {
             id: entry.id.to_string(),
             site_id: site_id.to_string(),
             session_id: Some(entry.session_id.to_string()),
-            sequence: entry.sequence_number as i64,
+            sequence: entry.sequence_number.cast_signed(),
             operation_type: operation_type_str(entry.operation_type),
             amount: entry.amount_ttc_cents.0,
             ht_cents: Some(entry.tva_breakdown.ht_cents.0),
@@ -175,7 +165,6 @@ impl FiscalEntryPayload {
 fn tva_rate_str(rate: TvaRate) -> String {
     match rate {
         TvaRate::Reduit5_5 => "5.5".to_string(),
-        TvaRate::Intermediaire10 => "10".to_string(),
         TvaRate::Normal20 => "20".to_string(),
         _ => "10".to_string(),
     }
@@ -226,13 +215,13 @@ pub(crate) fn serialize_batch(
 
 /// Représentation JSON d'une `Session` pour l'API Supabase REST.
 ///
-/// Colonnes cibles : `public.sessions` (id, site_id, session_ref,
-/// opened_at, closed_at, operator_id, opening_amount, status).
+/// Colonnes cibles : `public.sessions` (id, `site_id`, `session_ref`,
+/// `opened_at`, `closed_at`, `operator_id`, `opening_amount`, status).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionPayload {
     /// UUID de la session.
     pub id: String,
-    /// UUID du site (clé RLS — provient de SyncConfig, pas du type Session).
+    /// UUID du site (clé RLS — provient de `SyncConfig`, pas du type Session).
     pub site_id: String,
     /// Référence lisible de la session : "S0001", "S0002", etc.
     pub session_ref: String,
@@ -316,7 +305,7 @@ impl ZReportPayload {
             id:              report.id.to_string(),
             site_id:         site_id.to_string(),
             session_id:      report.session_id.0.to_string(),
-            report_number:   report.session_sequence_number as i64,
+            report_number:   report.session_sequence_number.cast_signed(),
             generated_at:    ms_to_iso8601(report.generated_at_ms),
             total_sales:     report.total_sales_cents.0,
             total_refunds,
@@ -328,9 +317,9 @@ impl ZReportPayload {
             tva_10_amount:   report.tva_10_breakdown.tva_cents.0,
             tva_20_base_ht:  report.tva_20_breakdown.ht_cents.0,
             tva_20_amount:   report.tva_20_breakdown.tva_cents.0,
-            entry_count:     report.entry_count as i64,
-            first_sequence:  Some(report.first_entry_sequence as i64),
-            last_sequence:   Some(report.last_entry_sequence as i64),
+            entry_count:     report.entry_count.cast_signed(),
+            first_sequence:  Some(report.first_entry_sequence.cast_signed()),
+            last_sequence:   Some(report.last_entry_sequence.cast_signed()),
             report_hash:     Some(hex_encode(&report.closing_hash)),
         }
     }

@@ -156,6 +156,7 @@ impl Cents {
 
     /// Convertit en euros (f64). À utiliser uniquement pour l'affichage.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)] // affichage uniquement — perte de précision acceptable
     pub fn to_euros(self) -> f64 {
         self.0 as f64 / 100.0
     }

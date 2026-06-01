@@ -1,10 +1,10 @@
-//! # routes::health
+//! # `routes::health`
 //!
 //! Route de healthcheck pour le monitoring.
 //!
 //! ## GET /api/v1/health
 //!
-//! Vérifie que le serveur est opérationnel et que SQLite est accessible.
+//! Vérifie que le serveur est opérationnel et que `SQLite` est accessible.
 //! Utilisé par les outils de monitoring (Uptime Kuma, nagios, etc.)
 //! et par le `sync-client` avant de tenter une synchronisation.
 //!
@@ -24,7 +24,7 @@ pub struct HealthResponse {
     pub status: &'static str,
     /// Version du logiciel.
     pub version: &'static str,
-    /// Statut de la base SQLite.
+    /// Statut de la base `SQLite`.
     pub database: &'static str,
     /// Session active en cours, si présente.
     pub active_session: Option<ActiveSessionInfo>,

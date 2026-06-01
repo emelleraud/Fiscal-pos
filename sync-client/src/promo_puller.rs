@@ -1,14 +1,14 @@
-//! # promo_puller
+//! # `promo_puller`
 //!
-//! Réception des promotions actives depuis Supabase et upsert dans SQLite local.
+//! Réception des promotions actives depuis Supabase et upsert dans `SQLite` local.
 //!
 //! ## Flux
 //! 1. Appeler `GET /rest/v1/promotions` avec filtre `active=true` et scope chain ou site
 //! 2. Pour chaque promotion reçue : upsert dans la table `promotions` locale
 //!
-//! ## Mapping Supabase → SQLite
-//! Le champ `trigger` (Supabase) est stocké dans la colonne `trigger_type` (SQLite)
-//! pour éviter le mot-clé réservé SQLite `TRIGGER`.
+//! ## Mapping Supabase → `SQLite`
+//! Le champ `trigger` (Supabase) est stocké dans la colonne `trigger_type` (`SQLite`)
+//! pour éviter le mot-clé réservé `SQLite` `TRIGGER`.
 
 use serde::Deserialize;
 use sqlx::SqlitePool;
@@ -37,18 +37,18 @@ struct RemotePromo {
     updated_at_ms: i64,
 }
 
-/// Tire les promotions actives depuis Supabase et les upsert dans SQLite local.
+/// Tire les promotions actives depuis Supabase et les upsert dans `SQLite` local.
 ///
 /// # Arguments
 /// * `client` - Client HTTP Supabase.
 /// * `config` - Configuration de synchronisation (contient le `site_id`).
-/// * `pool` - Pool SQLite local.
+/// * `pool` - Pool `SQLite` local.
 ///
 /// # Returns
 /// Nombre de promotions traitées.
 ///
 /// # Errors
-/// `SyncError::Database` si une insertion SQLite échoue (non fatal — warn + continue en sync_loop).
+/// `SyncError::Database` si une insertion `SQLite` échoue (non fatal — warn + continue en `sync_loop`).
 pub async fn pull_promotions(
     client: &SupabaseClient,
     config: &SyncConfig,
@@ -67,7 +67,7 @@ pub async fn pull_promotions(
         };
 
         let days_json = p.days_of_week.map(|d| d.to_string());
-        let active_int: i64 = if p.active.unwrap_or(false) { 1 } else { 0 };
+        let active_int: i64 = i64::from(p.active.unwrap_or(false));
 
         sqlx::query(
             "INSERT INTO promotions

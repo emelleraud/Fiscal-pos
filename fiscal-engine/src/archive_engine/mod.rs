@@ -1,4 +1,4 @@
-//! # archive_engine
+//! # `archive_engine`
 //!
 //! Génération et signature des archives annuelles fiscales (NF525 §7).
 //!
@@ -37,7 +37,7 @@
 //! - Une ligne par `FiscalEntry`, ordre chronologique par `sequence_number`
 //! - `reason` et `order_reference` vides si NULL
 
-use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey, Verifier};
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::SqlitePool;
 
@@ -68,16 +68,16 @@ ht_cents;tva_cents;tva_rate;hash_hex;previous_hash_hex;created_at_ms;reason;orde
 
 /// Génère l'export CSV d'une année fiscale.
 ///
-/// Charge toutes les entrées de l'année depuis SQLite, génère le CSV,
+/// Charge toutes les entrées de l'année depuis `SQLite`, génère le CSV,
 /// calcule le SHA-256 du contenu et retourne un `ArchiveExport` non signé.
 ///
 /// # Arguments
-/// * `pool` - Pool SQLite.
+/// * `pool` - Pool `SQLite`.
 /// * `year` - Année civile (ex: 2024).
 ///
 /// # Errors
 /// - `ArchiveError::NoDataForYear` si aucune entrée n'existe pour cette année
-/// - `FiscalError::Database` sur erreur SQLite
+/// - `FiscalError::Database` sur erreur `SQLite`
 ///
 /// # Examples
 /// ```no_run
@@ -101,8 +101,8 @@ pub async fn export_archive(pool: &SqlitePool, year: u32) -> Result<ArchiveExpor
 
     // 2. Compter les sessions distinctes couvertes
     let session_count = count_distinct_sessions(&entries);
-    let first_sequence = entries.first().map(|e| e.sequence_number).unwrap_or(1);
-    let last_sequence = entries.last().map(|e| e.sequence_number).unwrap_or(1);
+    let first_sequence = entries.first().map_or(1, |e| e.sequence_number);
+    let last_sequence = entries.last().map_or(1, |e| e.sequence_number);
     let entry_count = entries.len() as u64;
 
     // 3. Générer le CSV
@@ -226,7 +226,6 @@ pub fn verify_archive_signature(archive: &SignedArchive) -> Result<(), FiscalErr
     let signature = Signature::from_bytes(&archive.signature);
 
     // 4. Vérifier
-    use ed25519_dalek::Verifier;
     verifying_key
         .verify(&archive.export.csv_hash, &signature)
         .map_err(|e| {
@@ -248,13 +247,13 @@ pub fn verify_archive_signature(archive: &SignedArchive) -> Result<(), FiscalErr
 /// Cette fonction ne stocke que les métadonnées pour vérification ultérieure.
 ///
 /// # Arguments
-/// * `pool` - Pool SQLite.
+/// * `pool` - Pool `SQLite`.
 /// * `archive` - Archive signée dont on persiste les métadonnées.
 /// * `csv_path` - Chemin du fichier CSV sur disque.
 ///
 /// # Errors
 /// - `ArchiveError::ArchiveAlreadyExists` si l'année est déjà en base
-/// - `FiscalError::Database` sur erreur SQLite
+/// - `FiscalError::Database` sur erreur `SQLite`
 pub async fn persist_archive_metadata(
     pool: &SqlitePool,
     archive: &SignedArchive,
@@ -265,7 +264,7 @@ pub async fn persist_archive_metadata(
     // Vérifier l'idempotence (une archive par an)
     let existing =
         sqlx::query("SELECT year FROM archive_metadata WHERE year = ?")
-            .bind(year as i64)
+            .bind(i64::from(year))
             .fetch_optional(pool)
             .await?;
 
@@ -280,12 +279,12 @@ pub async fn persist_archive_metadata(
             software_version, site_id, csv_path
          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
     )
-    .bind(year as i64)
-    .bind(archive.export.entry_count as i64)
-    .bind(archive.export.session_count as i64)
-    .bind(archive.export.first_sequence as i64)
-    .bind(archive.export.last_sequence as i64)
-    .bind(archive.export.generated_at_ms as i64)
+    .bind(i64::from(year))
+    .bind(archive.export.entry_count.cast_signed())
+    .bind(archive.export.session_count.cast_signed())
+    .bind(archive.export.first_sequence.cast_signed())
+    .bind(archive.export.last_sequence.cast_signed())
+    .bind(archive.export.generated_at_ms.cast_signed())
     .bind(hex_encode(&archive.export.csv_hash))
     .bind(hex_encode_64(&archive.signature))
     .bind(hex_encode(&archive.public_key))
@@ -299,9 +298,12 @@ pub async fn persist_archive_metadata(
 }
 
 /// Vérifie que l'archive d'une année a déjà été générée.
+///
+/// # Errors
+/// `FiscalError::Database` sur erreur `SQLite`.
 pub async fn archive_exists(pool: &SqlitePool, year: u32) -> Result<bool, FiscalError> {
     let row = sqlx::query("SELECT year FROM archive_metadata WHERE year = ?")
-        .bind(year as i64)
+        .bind(i64::from(year))
         .fetch_optional(pool)
         .await?;
     Ok(row.is_some())
@@ -440,8 +442,9 @@ fn sha256_bytes(data: &[u8]) -> [u8; 32] {
 
 /// Encode 64 octets (signature Ed25519) en hex 128 caractères.
 fn hex_encode_64(bytes: &[u8; 64]) -> String {
+    use std::fmt::Write as _;
     bytes.iter().fold(String::with_capacity(128), |mut acc, b| {
-        acc.push_str(&format!("{b:02x}"));
+        write!(acc, "{b:02x}").expect("writing to String is infallible");
         acc
     })
 }
@@ -452,14 +455,18 @@ fn count_distinct_sessions(entries: &[FiscalEntry]) -> u64 {
         .iter()
         .map(|e| e.session_id.0)
         .collect::<HashSet<_>>()
-        .len() as u64
+        .len()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_millis() as u64
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 // ---------------------------------------------------------------------------

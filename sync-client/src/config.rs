@@ -3,9 +3,9 @@
 //! Configuration du `sync-client` chargée depuis les variables d'environnement.
 //!
 //! ## Variables obligatoires
-//! - `DATABASE_URL` — chemin SQLite de la base du restaurant
+//! - `DATABASE_URL` — chemin `SQLite` de la base du restaurant
 //! - `SUPABASE_URL` — URL de l'instance Supabase
-//! - `SUPABASE_SERVICE_KEY` — clé service_role (jamais la anon key)
+//! - `SUPABASE_SERVICE_KEY` — clé `service_role` (jamais la anon key)
 //!
 //! ## Variables optionnelles (avec défauts)
 //! - `SYNC_INTERVAL_SECONDS` — intervalle entre deux cycles (défaut : 30)
@@ -20,13 +20,13 @@ use crate::error::SyncError;
 /// Configuration complète du sync-client.
 #[derive(Debug, Clone)]
 pub struct SyncConfig {
-    /// URL SQLite locale (ex: `sqlite:./restaurant.db`).
+    /// URL `SQLite` locale (ex: `sqlite:./restaurant.db`).
     pub database_url: String,
 
     /// URL de base Supabase (ex: `https://xxxx.supabase.co`).
     pub supabase_url: String,
 
-    /// Clé service_role Supabase. Ne jamais utiliser la anon key.
+    /// Clé `service_role` Supabase. Ne jamais utiliser la anon key.
     pub supabase_service_key: String,
 
     /// Identifiant unique du restaurant (SIRET ou ID réseau interne).
@@ -156,10 +156,10 @@ fn parse_env_u32(key: &str, default: u32) -> Result<u32, SyncError> {
 /// Jitter pseudo-aléatoire (0..1000ms) basé sur le timestamp système.
 /// Pas de dépendance `rand` pour rester minimal.
 fn jitter_ms() -> u64 {
-    std::time::SystemTime::now()
+    u64::from(std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .subsec_millis() as u64
+        .subsec_millis())
         % 1_000
 }
 

@@ -30,7 +30,7 @@ pub enum SyncError {
         body: String,
     },
 
-    /// Erreur d'accès à la base SQLite locale.
+    /// Erreur d'accès à la base `SQLite` locale.
     #[error("Erreur SQLite locale : {0}")]
     Database(#[from] sqlx::Error),
 
@@ -69,8 +69,7 @@ impl SyncError {
         match self {
             Self::Network(_) | Self::Timeout { .. } => true,
             Self::HttpError { status, .. } => *status >= 500,
-            Self::Database(_) | Self::Fiscal(_) | Self::Serialization(_) => false,
-            Self::FatalConfig { .. } => false,
+            Self::Database(_) | Self::Fiscal(_) | Self::Serialization(_) | Self::FatalConfig { .. } => false,
         }
     }
 }

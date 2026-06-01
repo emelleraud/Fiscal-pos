@@ -6,7 +6,7 @@
 //! Toute erreur du `fiscal-engine` est **bloquante** : elle produit une réponse
 //! d'erreur HTTP avec le code approprié. Il n'existe pas de fallback silencieux.
 //!
-//! ## Mapping FiscalError → HTTP
+//! ## Mapping `FiscalError` → HTTP
 //!
 //! | Variante FiscalError              | Code HTTP |
 //! |-----------------------------------|-----------|
