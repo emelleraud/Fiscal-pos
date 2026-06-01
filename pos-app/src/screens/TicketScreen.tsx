@@ -79,7 +79,7 @@ export function TicketScreen(): React.ReactElement {
                   {appliedPromos.map((p) => (
                     <div key={p.promo_id} className="flex justify-between text-sm">
                       <span className="text-green-400">🏷️ {p.name}</span>
-                      <span className="text-green-400 font-medium">-{(p.discount_cents / 100).toFixed(2)} €</span>
+                      <span className="text-green-400 font-medium">-{formatCents(p.discount_cents)}</span>
                     </div>
                   ))}
                 </div>
