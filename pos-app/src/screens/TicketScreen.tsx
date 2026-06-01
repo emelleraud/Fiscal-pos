@@ -83,6 +83,12 @@ export function TicketScreen(): React.ReactElement {
                     </div>
                   ))}
                 </div>
+                <div className="border-t border-gray-700 pt-2 flex justify-between font-bold">
+                  <span className="text-white">Net à payer</span>
+                  <span className="text-green-400 text-lg">
+                    {formatCents(totalCents - appliedPromos.reduce((s, p) => s + p.discount_cents, 0))}
+                  </span>
+                </div>
               </>
             )}
           </div>
