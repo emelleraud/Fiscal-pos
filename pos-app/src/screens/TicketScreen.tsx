@@ -11,6 +11,7 @@ import { useSession, useOrder } from '@/hooks/useOrder';
 import { Header, StatusBar } from '@/components/layout/Header';
 import { Button, Badge } from '@/components/ui';
 import { formatCents, formatTimestamp } from '@/api/client';
+import { printViaElectron, formatTicket } from '@/utils/printer';
 
 export function TicketScreen(): React.ReactElement {
   const entry = useOrderStore((s) => s.currentFiscalEntry);
@@ -27,8 +28,28 @@ export function TicketScreen(): React.ReactElement {
   const netTotal = Math.max(0, totalCents - discountTotal);
   const changeCents = paymentMethod === 'cash' ? amountPaid - netTotal : 0;
 
-  const handlePrint = () => {
-    window.print();
+  const [isPrinting, setIsPrinting] = React.useState(false);
+  const setGlobalError = useUiStore((s) => s.setGlobalError);
+
+  const handlePrint = async () => {
+    setIsPrinting(true);
+    await printViaElectron(
+      formatTicket({
+        sessionSequence: session?.session_sequence ?? 0,
+        cart,
+        appliedPromos,
+        totalCents,
+        netTotal,
+        paymentMethod: paymentMethod ?? 'card',
+        amountPaidCents: amountPaid,
+        changeCents,
+        sequenceNumber: entry?.sequence_number ?? 0,
+        hashHex: entry?.hash_hex ?? '',
+        createdAtMs: entry?.created_at_ms ?? Date.now(),
+      }),
+      setGlobalError
+    );
+    setIsPrinting(false);
   };
 
   const handleNewOrder = () => {
@@ -149,7 +170,7 @@ export function TicketScreen(): React.ReactElement {
 
       {/* Actions */}
       <div className="px-6 py-4 bg-gray-900 border-t border-gray-800 flex gap-4">
-        <Button variant="ghost" size="lg" onClick={handlePrint}>
+        <Button variant="ghost" size="lg" loading={isPrinting} onClick={() => { void handlePrint(); }}>
           🖨 Imprimer
         </Button>
         <Button variant="primary" size="lg" fullWidth onClick={handleNewOrder}>
@@ -295,11 +316,14 @@ export function ZReportScreen(): React.ReactElement {
   const { closeSession, isClosing } = useSession();
   const session = useSessionStore((s) => s.session);
 
-  const handlePrint = () => {
-    if (lastZReportText) {
-      // En production : envoyer via IPC Electron au driver imprimante
-      alert(lastZReportText);
-    }
+  const [isPrinting, setIsPrinting] = React.useState(false);
+  const setGlobalError = useUiStore((s) => s.setGlobalError);
+
+  const handlePrint = async () => {
+    if (!lastZReportText) return;
+    setIsPrinting(true);
+    await printViaElectron(lastZReportText, setGlobalError);
+    setIsPrinting(false);
   };
 
   return (
@@ -424,7 +448,7 @@ export function ZReportScreen(): React.ReactElement {
           ← Retour caisse
         </Button>
         {lastZReport && (
-          <Button variant="secondary" size="lg" onClick={handlePrint}>
+          <Button variant="secondary" size="lg" loading={isPrinting} onClick={() => { void handlePrint(); }}>
             🖨 Imprimer rapport Z
           </Button>
         )}
