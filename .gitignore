@@ -34,3 +34,7 @@ out/
 # Electron
 release/
 pos-app/electron/*.js
+
+# Playwright
+pos-app/test-results/
+pos-app/playwright-report/
