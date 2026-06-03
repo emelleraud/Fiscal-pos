@@ -41,7 +41,10 @@ export interface TicketParams {
 }
 
 export function formatTicket(p: TicketParams): string {
-  const date = new Date(p.createdAtMs).toLocaleDateString('fr-FR');
+  const date = new Date(p.createdAtMs).toLocaleString('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
   const out: string[] = [];
 
   out.push(divider('='));

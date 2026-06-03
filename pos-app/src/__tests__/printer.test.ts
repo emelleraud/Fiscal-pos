@@ -95,6 +95,16 @@ describe('formatTicket', () => {
     expect(text).toContain('NF525');
   });
 
+  it('pied de ticket contient l\'heure (timestamp complet)', () => {
+    // createdAtMs is fixed in baseParams so the locale string is deterministic
+    const text = formatTicket(baseParams);
+    // The date portion (at minimum) must appear in the header
+    expect(text).toContain('03/06/2026');
+    // Time must also be present (non-empty formatted time portion)
+    const headerLine = text.split('\n').find((l) => l.includes('Session #42'));
+    expect(headerLine).toMatch(/\d{2}:\d{2}/); // HH:MM pattern
+  });
+
   it('toutes les lignes font au plus 40 chars — avec promos', () => {
     const promos: AppliedPromo[] = [
       { promo_id: 'p1', name: 'Happy Hour vendredi soir', discount_cents: 200 },
