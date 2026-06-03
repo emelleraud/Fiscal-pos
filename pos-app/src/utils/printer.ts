@@ -1,6 +1,6 @@
-import type { CartItem } from '@/store';
-import type { AppliedPromo } from '@/api/client';
 import { formatCents } from '@/api/client';
+import type { CartItem } from '@/store';
+import type { AppliedPromo, PaymentMethod } from '@/api/client';
 
 const WIDTH = 40;
 
@@ -9,8 +9,9 @@ function divider(char = '-'): string {
 }
 
 function center(text: string): string {
-  const pad = Math.max(0, Math.floor((WIDTH - text.length) / 2));
-  return ' '.repeat(pad) + text;
+  const clipped = text.slice(0, WIDTH);
+  const pad = Math.max(0, Math.floor((WIDTH - clipped.length) / 2));
+  return ' '.repeat(pad) + clipped;
 }
 
 function row(label: string, value: string): string {
@@ -21,7 +22,7 @@ function row(label: string, value: string): string {
 
 const PAYMENT_LABELS: Record<string, string> = {
   card: 'Carte bancaire',
-  cash: 'Especes',
+  cash: 'Espèces',
   meal_voucher: 'Ticket restaurant',
 };
 
@@ -31,7 +32,7 @@ export interface TicketParams {
   appliedPromos: AppliedPromo[];
   totalCents: number;
   netTotal: number;
-  paymentMethod: string;
+  paymentMethod: PaymentMethod;
   amountPaidCents: number;
   changeCents: number;
   sequenceNumber: number;
@@ -86,8 +87,12 @@ export async function printViaElectron(
     console.log('[DEV PRINT]\n' + text);
     return;
   }
-  const result = await window.electronAPI.printText(text);
-  if (!result.success) {
-    onError(result.error ?? 'Erreur impression inconnue');
+  try {
+    const result = await window.electronAPI.printText(text);
+    if (!result.success) {
+      onError(result.error ?? 'Erreur impression inconnue');
+    }
+  } catch (err) {
+    onError(err instanceof Error ? err.message : 'Erreur impression inconnue');
   }
 }

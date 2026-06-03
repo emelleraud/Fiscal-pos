@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { formatTicket } from '../utils/printer';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { formatTicket, printViaElectron } from '../utils/printer';
 import type { CartItem } from '../store';
 import type { AppliedPromo } from '../api/client';
+import type { TicketParams } from '../utils/printer';
 
 const mockCart: CartItem[] = [
   {
@@ -30,7 +31,7 @@ const mockCart: CartItem[] = [
   },
 ];
 
-const baseParams = {
+const baseParams: TicketParams = {
   sessionSequence: 42,
   cart: mockCart,
   appliedPromos: [] as AppliedPromo[],
@@ -92,5 +93,60 @@ describe('formatTicket', () => {
   it('pied de ticket : mention NF525 présente', () => {
     const text = formatTicket(baseParams);
     expect(text).toContain('NF525');
+  });
+
+  it('toutes les lignes font au plus 40 chars — avec promos', () => {
+    const promos: AppliedPromo[] = [
+      { promo_id: 'p1', name: 'Happy Hour vendredi soir', discount_cents: 200 },
+    ];
+    const text = formatTicket({ ...baseParams, appliedPromos: promos, netTotal: 1650 });
+    text.split('\n').forEach((line) => {
+      expect(line.length).toBeLessThanOrEqual(40);
+    });
+  });
+});
+
+describe('printViaElectron', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('dev fallback : console.log quand window.electronAPI est absent', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const onError = vi.fn();
+    // window.electronAPI is undefined in jsdom — no stub needed
+    await printViaElectron('test text', onError);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[DEV PRINT]'));
+    expect(onError).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('appelle onError si result.success est false', async () => {
+    vi.stubGlobal('electronAPI', {
+      getApiUrl: vi.fn(),
+      printText: vi.fn().mockResolvedValue({ success: false, error: 'Imprimante hors ligne' }),
+    });
+    const onError = vi.fn();
+    await printViaElectron('test text', onError);
+    expect(onError).toHaveBeenCalledWith('Imprimante hors ligne');
+  });
+
+  it('appelle onError si printText lève une exception', async () => {
+    vi.stubGlobal('electronAPI', {
+      getApiUrl: vi.fn(),
+      printText: vi.fn().mockRejectedValue(new Error('IPC crash')),
+    });
+    const onError = vi.fn();
+    await printViaElectron('test text', onError);
+    expect(onError).toHaveBeenCalledWith('IPC crash');
+  });
+
+  it('ne lève pas d\'exception même si printText throw', async () => {
+    vi.stubGlobal('electronAPI', {
+      getApiUrl: vi.fn(),
+      printText: vi.fn().mockRejectedValue(new Error('crash')),
+    });
+    const onError = vi.fn();
+    await expect(printViaElectron('test text', onError)).resolves.toBeUndefined();
   });
 });
