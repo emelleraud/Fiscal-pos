@@ -11,6 +11,10 @@ test.describe.serial('POS Fiscal — E2E flows', () => {
     await pos.ensureSessionOpen();
   });
 
+  test.afterAll(async () => {
+    await pos.page.close();
+  });
+
   // Flow 1 : ajouter un article → payer CB → TicketScreen → imprimer
   // Vérifie que [DEV PRINT] apparaît dans la console (printViaElectron en dev).
   test('Flow 1 — order → paiement CB → ticket → [DEV PRINT]', async () => {
@@ -21,6 +25,7 @@ test.describe.serial('POS Fiscal — E2E flows', () => {
     await pos.confirmPayment();
     await expect(pos.page.getByText('Paiement accepté')).toBeVisible();
     await pos.clickPrint();
+    // clickPrint() already awaited the [DEV PRINT] event — this is a belt-and-suspenders assertion
     expect(pos.consoleLogs.some((l) => l.includes('[DEV PRINT]'))).toBe(true);
     await pos.newOrder();
   });
@@ -47,6 +52,7 @@ test.describe.serial('POS Fiscal — E2E flows', () => {
     await expect(pos.page.getByText('Session clôturée')).toBeVisible();
     pos.clearConsoleLogs();
     await pos.clickPrint();
+    // clickPrint() already awaited the [DEV PRINT] event — this is a belt-and-suspenders assertion
     expect(pos.consoleLogs.some((l) => l.includes('[DEV PRINT]'))).toBe(true);
   });
 });
