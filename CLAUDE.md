@@ -39,7 +39,7 @@ backoffice (React Vite, port 5173 — dashboard / journal / rapports Z)
 
 | App | Tech | Port |
 |---|---|---|
-| `pos-app` | Electron + React 18 + Vite 5 + Zustand + TailwindCSS | 5173 |
+| `pos-app` | Electron + React 18 + Vite 5 + Zustand + TailwindCSS | 5175 |
 | `backoffice` | React 19 + React Router 7 + Supabase JS + Vite | 5173 |
 
 ---
