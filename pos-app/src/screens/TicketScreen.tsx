@@ -32,24 +32,28 @@ export function TicketScreen(): React.ReactElement {
   const setGlobalError = useUiStore((s) => s.setGlobalError);
 
   const handlePrint = async () => {
+    if (!entry) return;
     setIsPrinting(true);
-    await printViaElectron(
-      formatTicket({
-        sessionSequence: session?.session_sequence ?? 0,
-        cart,
-        appliedPromos,
-        totalCents,
-        netTotal,
-        paymentMethod: paymentMethod ?? 'card',
-        amountPaidCents: amountPaid,
-        changeCents,
-        sequenceNumber: entry?.sequence_number ?? 0,
-        hashHex: entry?.hash_hex ?? '',
-        createdAtMs: entry?.created_at_ms ?? Date.now(),
-      }),
-      setGlobalError
-    );
-    setIsPrinting(false);
+    try {
+      await printViaElectron(
+        formatTicket({
+          sessionSequence: session?.session_sequence ?? 0,
+          cart,
+          appliedPromos,
+          totalCents,
+          netTotal,
+          paymentMethod: paymentMethod ?? 'card',
+          amountPaidCents: amountPaid,
+          changeCents,
+          sequenceNumber: entry.sequence_number,
+          hashHex: entry.hash_hex,
+          createdAtMs: entry.created_at_ms,
+        }),
+        setGlobalError
+      );
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const handleNewOrder = () => {
@@ -322,8 +326,11 @@ export function ZReportScreen(): React.ReactElement {
   const handlePrint = async () => {
     if (!lastZReportText) return;
     setIsPrinting(true);
-    await printViaElectron(lastZReportText, setGlobalError);
-    setIsPrinting(false);
+    try {
+      await printViaElectron(lastZReportText, setGlobalError);
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   return (
