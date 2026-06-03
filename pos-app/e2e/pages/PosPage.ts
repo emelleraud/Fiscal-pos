@@ -18,7 +18,7 @@ export class PosPage {
   }
 
   get consoleLogs(): string[] {
-    return this._consoleLogs;
+    return [...this._consoleLogs];
   }
 
   clearConsoleLogs(): void {
@@ -48,7 +48,7 @@ export class PosPage {
   }
 
   async confirmPayment(): Promise<void> {
-    await this.page.getByRole('button', { name: /Paiement reçu/ }).click();
+    await this.page.getByRole('button', { name: /Paiement reçu — valider/ }).click();
     await this.page.getByText('Paiement accepté').waitFor({ state: 'visible', timeout: 10_000 });
   }
 
@@ -77,7 +77,7 @@ export class PosPage {
   }
 
   async confirmCancel(): Promise<void> {
-    await this.page.getByRole('checkbox').check();
+    await this.page.getByLabel(/Je confirme l'annulation/).check();
     await this.page.getByRole('button', { name: "Confirmer l'annulation" }).click();
     await this.page.getByText('Caisse').first().waitFor({ state: 'visible', timeout: 10_000 });
   }
