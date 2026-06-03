@@ -12,7 +12,7 @@ test.describe.serial('POS Fiscal — E2E flows', () => {
   });
 
   test.afterAll(async () => {
-    await pos.page.close();
+    await pos?.page?.close();
   });
 
   // Flow 1 : ajouter un article → payer CB → TicketScreen → imprimer
@@ -48,9 +48,9 @@ test.describe.serial('POS Fiscal — E2E flows', () => {
   // Doit être le dernier test — la session est fermée après cette opération.
   test('Flow 3 — rapport Z → clôturer → résultats → imprimer', async () => {
     await pos.navigateToZReport();
+    pos.clearConsoleLogs();
     await pos.closeSession();
     await expect(pos.page.getByText('Session clôturée')).toBeVisible();
-    pos.clearConsoleLogs();
     await pos.clickPrint();
     // clickPrint() already awaited the [DEV PRINT] event — this is a belt-and-suspenders assertion
     expect(pos.consoleLogs.some((l) => l.includes('[DEV PRINT]'))).toBe(true);

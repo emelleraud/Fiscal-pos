@@ -65,6 +65,9 @@ cd backoffice && npm run dev
 # pos-app (dev React)
 cd pos-app && npm run dev
 
+# pos-app — tests E2E Playwright (nécessite edge-api + dev server)
+cd pos-app && npm run test:e2e
+
 # pos-app (Electron dev — compile TS puis démarre)
 cd pos-app && npm run electron:dev
 
