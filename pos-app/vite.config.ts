@@ -11,7 +11,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 5175,
+    strictPort: true,
     // Proxy vers l'edge-api locale — évite les problèmes CORS en dev
     proxy: {
       '/api': {
