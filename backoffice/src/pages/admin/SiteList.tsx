@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../../supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 
 interface Site { id: string; site_code: string; name: string; address: string | null; siret: string | null }
 
@@ -10,6 +11,8 @@ export default function SiteList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const { role } = useAuth()
+  const canWrite = role === 'pos_admin'
 
   useEffect(() => {
     setLoading(true)
@@ -30,12 +33,14 @@ export default function SiteList() {
           Restaurants{' '}
           <span style={{ color: '#888', fontWeight: 400, fontSize: '0.9rem' }}>{sites.length} site(s)</span>
         </h2>
-        <button
-          onClick={() => navigate('/admin/sites/new')}
-          style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: 600 }}
-        >
-          + Nouveau restaurant
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => navigate('/admin/sites/new')}
+            style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 6, padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: 600 }}
+          >
+            + Nouveau restaurant
+          </button>
+        )}
       </div>
       {error && <p style={{ color: '#e53e3e' }}>{error}</p>}
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -54,7 +59,9 @@ export default function SiteList() {
               <td style={{ padding: '0.7rem 0.8rem', color: '#666', fontSize: '0.85rem' }}>{s.address ?? '—'}</td>
               <td style={{ padding: '0.7rem 0.8rem', color: '#888', fontSize: '0.8rem', fontFamily: 'monospace' }}>{s.siret ?? '—'}</td>
               <td style={{ padding: '0.7rem 0.8rem' }}>
-                <Link to={`/admin/sites/${s.id}`} style={{ color: '#4f8ef7', textDecoration: 'none', marginRight: 12 }}>Éditer</Link>
+                {canWrite && (
+                  <Link to={`/admin/sites/${s.id}`} style={{ color: '#4f8ef7', textDecoration: 'none', marginRight: 12 }}>Éditer</Link>
+                )}
                 <Link to={`/admin/sites/${s.id}/config`} style={{ color: '#666', textDecoration: 'none' }}>Config</Link>
               </td>
             </tr>
