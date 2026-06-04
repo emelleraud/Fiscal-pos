@@ -43,9 +43,6 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  const body = await req.json() as { action: string; payload: Record<string, string> }
-  const { action, payload } = body
-
   // Pour regional_director : vérifie que le site cible est dans son périmètre
   async function assertScope(targetSiteId: string | undefined): Promise<Response | null> {
     if (callerRole === 'pos_admin') return null
@@ -60,11 +57,14 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const body = await req.json() as { action: string; payload: Record<string, string> }
+    const { action, payload } = body
+
     switch (action) {
       case 'list': {
-        const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
+        const { data, error } = await supabaseUser.rpc('list_admin_users')
         if (error) throw error
-        return new Response(JSON.stringify({ users: data.users }), {
+        return new Response(JSON.stringify({ users: data }), {
           status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
@@ -102,8 +102,13 @@ Deno.serve(async (req) => {
         const { data: { user: targetUser }, error: getErr } = await supabaseAdmin.auth.admin.getUserById(payload.user_id)
         if (getErr) throw getErr
         const currentSiteId = targetUser.app_metadata?.site_id as string | undefined
+        // Vérifier scope sur le site actuel ET le nouveau site si fourni
         const scopeErr = await assertScope(currentSiteId)
         if (scopeErr) return scopeErr
+        if (payload.site_id && payload.site_id !== currentSiteId) {
+          const newScopeErr = await assertScope(payload.site_id)
+          if (newScopeErr) return newScopeErr
+        }
         const appMeta: Record<string, string> = { role: payload.role }
         if (payload.site_id) appMeta.site_id = payload.site_id
         const { error } = await supabaseAdmin.auth.admin.updateUserById(payload.user_id, { app_metadata: appMeta })
@@ -129,7 +134,10 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'unknown_action' }), { status: 400, headers: corsHeaders })
     }
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'internal_error'
+    console.error('user-admin error:', e)
+    const msg = e instanceof Error && (e.message === 'scope_forbidden' || e.message === 'unknown_action')
+      ? e.message
+      : 'internal_error'
     return new Response(JSON.stringify({ error: msg }), { status: 400, headers: corsHeaders })
   }
 })
