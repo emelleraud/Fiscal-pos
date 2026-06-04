@@ -75,6 +75,10 @@ export default function PermissionsMatrix() {
     if (!editing) return
     if (editing.lock_from && !editing.lock_until) { setError('Heure de fin requise'); return }
     if (!editing.lock_from && editing.lock_until) { setError('Heure de début requise'); return }
+    if (editing.lock_from && editing.lock_until && editing.lock_until <= editing.lock_from) {
+      setError("L'heure de fin doit être après l'heure de début")
+      return
+    }
     setSaving(true); setError(null)
     try {
       const existing = ruleForScope(permissions, scope, scopeId, editing.dimension, editing.target_role)
