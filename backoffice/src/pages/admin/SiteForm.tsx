@@ -52,7 +52,7 @@ export default function SiteForm() {
       }
       navigate('/admin/sites')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erreur de sauvegarde')
+      setError(e instanceof Error ? e.message : (e as { message?: string })?.message ?? 'Erreur de sauvegarde')
     } finally { setSaving(false) }
   }
 

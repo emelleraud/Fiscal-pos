@@ -66,7 +66,7 @@ export default function TechnicalConfigForm() {
       }
       navigate('/admin/sites')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erreur')
+      setError(e instanceof Error ? e.message : (e as { message?: string })?.message ?? 'Erreur')
     } finally { setSaving(false) }
   }
 
@@ -88,7 +88,7 @@ export default function TechnicalConfigForm() {
         : { id: '', edge_api_port: Number(port), sync_interval_s: Number(syncInterval), fiscal_key_configured_at: data!.configured_at }
       )
     } catch (e: unknown) {
-      setKeyError(e instanceof Error ? e.message : 'Erreur')
+      setKeyError(e instanceof Error ? e.message : (e as { message?: string })?.message ?? 'Erreur')
     } finally { setSavingKey(false) }
   }
 

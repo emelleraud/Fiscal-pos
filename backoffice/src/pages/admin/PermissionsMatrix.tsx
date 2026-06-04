@@ -103,7 +103,7 @@ export default function PermissionsMatrix() {
       reload()
       setEditing(null)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erreur')
+      setError(e instanceof Error ? e.message : (e as { message?: string })?.message ?? 'Erreur')
     } finally { setSaving(false) }
   }
 

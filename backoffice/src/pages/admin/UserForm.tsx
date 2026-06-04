@@ -78,7 +78,7 @@ export default function UserForm() {
         setCreatedCreds({ email: data!.email, temp_password: data!.temp_password })
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erreur')
+      setError(e instanceof Error ? e.message : (e as { message?: string })?.message ?? 'Erreur')
     } finally { setSaving(false) }
   }
 
