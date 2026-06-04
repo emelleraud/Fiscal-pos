@@ -79,15 +79,15 @@ BEGIN
     SELECT
       u.id,
       u.email,
-      (u.app_metadata ->> 'role')::text,
-      (u.app_metadata ->> 'site_id')::text,
-      (u.app_metadata ->> 'display_name')::text,
+      (u.raw_app_meta_data ->> 'role')::text,
+      (u.raw_app_meta_data ->> 'site_id')::text,
+      (u.raw_app_meta_data ->> 'display_name')::text,
       (u.banned_until IS NOT NULL AND u.banned_until > now()),
       u.created_at
     FROM auth.users u
     WHERE v_role = 'pos_admin'
-       OR (u.app_metadata ->> 'site_id') IS NULL
-       OR public.can_access_site((u.app_metadata ->> 'site_id')::uuid)
+       OR (u.raw_app_meta_data ->> 'site_id') IS NULL
+       OR public.can_access_site((u.raw_app_meta_data ->> 'site_id')::uuid)
     ORDER BY u.created_at DESC;
 END; $$;
 
