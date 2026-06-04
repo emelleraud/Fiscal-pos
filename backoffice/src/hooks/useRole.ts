@@ -1,11 +1,12 @@
 import { useAuth } from '../context/AuthContext'
 
-export type Role = 'manager' | 'director' | 'regional_director'
+export type Role = 'manager' | 'director' | 'regional_director' | 'pos_admin'
 
 const RANK: Record<Role, number> = {
   manager: 1,
   director: 2,
   regional_director: 3,
+  pos_admin: 4,
 }
 
 export function useRole() {
