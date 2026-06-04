@@ -29,6 +29,13 @@ Deno.serve(async (req) => {
 
     const { site_id, key_hex } = await req.json() as { site_id: string; key_hex: string }
 
+    if (!site_id || typeof site_id !== 'string') {
+      return new Response(JSON.stringify({ error: 'missing_site_id' }), { status: 400, headers: corsHeaders })
+    }
+    if (!key_hex || !/^[0-9a-fA-F]{64}$/.test(key_hex)) {
+      return new Response(JSON.stringify({ error: 'invalid_key_format' }), { status: 400, headers: corsHeaders })
+    }
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -40,8 +47,8 @@ Deno.serve(async (req) => {
     })
 
     if (error) {
-      const status = error.message.includes('invalid_key_format') ? 400 : 500
-      return new Response(JSON.stringify({ error: error.message }), { status, headers: corsHeaders })
+      console.error('provision_fiscal_key error:', error)
+      return new Response(JSON.stringify({ error: 'provision_failed' }), { status: 500, headers: corsHeaders })
     }
 
     return new Response(JSON.stringify({ configured_at }), {
