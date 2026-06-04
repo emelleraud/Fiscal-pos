@@ -1,12 +1,12 @@
 -- supabase/migrations/016_site_technical_configs.sql
 -- Paramètres serveur par site/device. Clés Ed25519 en Vault (jamais ici).
 
-CREATE TABLE public.site_technical_configs (
+CREATE TABLE IF NOT EXISTS public.site_technical_configs (
   id                       uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   site_id                  uuid        NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE,
   device_type              text        NOT NULL DEFAULT 'pos',
-  edge_api_port            integer     NOT NULL DEFAULT 8080,
-  sync_interval_s          integer     NOT NULL DEFAULT 300,
+  edge_api_port            integer     NOT NULL DEFAULT 8080 CHECK (edge_api_port BETWEEN 1 AND 65535),
+  sync_interval_s          integer     NOT NULL DEFAULT 300  CHECK (sync_interval_s >= 10),
   fiscal_key_configured_at timestamptz,
   updated_at               timestamptz NOT NULL DEFAULT now(),
   UNIQUE (site_id, device_type)
@@ -14,7 +14,8 @@ CREATE TABLE public.site_technical_configs (
 
 -- Helper RLS : accès d'un user à un site donné
 CREATE OR REPLACE FUNCTION public.can_access_site(p_site_id uuid)
-RETURNS boolean LANGUAGE sql STABLE AS $$
+RETURNS boolean LANGUAGE sql STABLE
+SET search_path = public AS $$
   SELECT CASE public.auth_app_role()
     WHEN 'pos_admin'         THEN true
     WHEN 'pos_auditeur'      THEN true
@@ -84,6 +85,9 @@ BEGIN
       (u.banned_until IS NOT NULL AND u.banned_until > now()),
       u.created_at
     FROM auth.users u
+    WHERE v_role = 'pos_admin'
+       OR (u.app_metadata ->> 'site_id') IS NULL
+       OR public.can_access_site((u.app_metadata ->> 'site_id')::uuid)
     ORDER BY u.created_at DESC;
 END; $$;
 
@@ -92,14 +96,17 @@ GRANT EXECUTE ON FUNCTION public.list_admin_users TO authenticated;
 -- RLS site_technical_configs
 ALTER TABLE public.site_technical_configs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "stc_read" ON public.site_technical_configs;
 CREATE POLICY "stc_read" ON public.site_technical_configs
   FOR SELECT TO authenticated USING (public.can_access_site(site_id));
 
+DROP POLICY IF EXISTS "stc_admin_write" ON public.site_technical_configs;
 CREATE POLICY "stc_admin_write" ON public.site_technical_configs
   FOR ALL TO authenticated
   USING    (public.auth_app_role() = 'pos_admin')
   WITH CHECK (public.auth_app_role() = 'pos_admin');
 
+DROP POLICY IF EXISTS "stc_service_role" ON public.site_technical_configs;
 CREATE POLICY "stc_service_role" ON public.site_technical_configs
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
