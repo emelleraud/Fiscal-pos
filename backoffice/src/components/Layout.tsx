@@ -21,7 +21,7 @@ const navItems: NavItem[] = [
 ]
 
 export default function Layout() {
-  const { signOut } = useAuth()
+  const { signOut, role } = useAuth()
   const { sites, activeSiteId, setActiveSiteId } = useSite()
   const { hasRole } = useRole()
 
@@ -100,6 +100,40 @@ export default function Layout() {
           >
             🏘️ Groupes
           </NavLink>
+        )}
+
+        {(role === 'pos_admin' || role === 'regional_director') && (
+          <>
+            <div style={{ marginTop: '0.75rem', marginBottom: '0.25rem' }}>
+              <div style={{ borderTop: '1px solid #2a2a4a', marginBottom: '0.5rem' }} />
+              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase' as const, letterSpacing: '0.12em', color: '#444', paddingLeft: '0.75rem' }}>
+                Réseau
+              </span>
+            </div>
+            {[
+              { to: '/admin/sites',       label: '🏢 Restaurants' },
+              { to: '/admin/users',       label: '👥 Utilisateurs' },
+              { to: '/admin/permissions', label: '🔐 Permissions' },
+            ].map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                style={({ isActive }) => ({
+                  display: 'block',
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: 6,
+                  textDecoration: 'none',
+                  color: isActive ? '#fff' : '#888',
+                  background: isActive ? '#16213e' : 'transparent',
+                  borderLeft: isActive ? '3px solid #4f8ef7' : '3px solid transparent',
+                  transition: 'all 0.15s',
+                  fontSize: '0.85rem',
+                })}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </>
         )}
 
         <button
