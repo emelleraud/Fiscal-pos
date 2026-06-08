@@ -34,7 +34,8 @@ pub async fn pull_and_apply_config(
     client: &SupabaseClient,
     config: &SyncConfig,
 ) -> Result<bool, SyncError> {
-    let Some(remote) = client.pull_config(&config.site_id).await? else {
+    // Étape 1 : vérification légère de la version (~100 octets vs ~50 KB pour le menu complet)
+    let Some(remote_version) = client.pull_config_version(&config.site_id).await? else {
         debug!(
             "Aucune configuration disponible pour le site {}",
             config.site_id
@@ -42,26 +43,33 @@ pub async fn pull_and_apply_config(
         return Ok(false);
     };
 
-    // Vérifier si c'est une nouvelle version
     let local_version = read_local_version(&config.data_dir);
 
-    if remote.version <= local_version {
+    if remote_version <= local_version {
         debug!(
-            remote_version = remote.version,
-            local_version = local_version,
+            remote_version,
+            local_version,
             "Configuration à jour, pas de mise à jour nécessaire"
         );
         return Ok(false);
     }
 
     info!(
-        remote_version = remote.version,
-        local_version = local_version,
+        remote_version,
+        local_version,
         site_id = %config.site_id,
-        "Nouvelle configuration disponible — application en cours"
+        "Nouvelle version de configuration détectée — téléchargement complet"
     );
 
-    // Appliquer la nouvelle configuration
+    // Étape 2 : téléchargement du menu complet uniquement si la version a changé
+    let Some(remote) = client.pull_config_full(&config.site_id).await? else {
+        warn!(
+            "Configuration attendue introuvable après vérification de version — site {}",
+            config.site_id
+        );
+        return Ok(false);
+    };
+
     apply_config(&remote, &config.data_dir);
 
     Ok(true)

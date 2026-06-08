@@ -117,16 +117,17 @@ impl SupabaseClient {
 
         debug!(url = %url, count = payloads.len(), "Push batch fiscal_entries");
 
+        let count = payloads.len() as u64;
         let response = self
             .client
             .post(&url)
             .header("apikey", &self.service_key)
             .header("Authorization", format!("Bearer {}", self.service_key))
             .header("Content-Type", "application/json")
-            // Idempotence : ignorer les doublons (clé primaire = id UUID)
+            // return=minimal : pas de corps en réponse → zéro egress sur les inserts
             .header(
                 "Prefer",
-                "resolution=ignore-duplicates,return=representation",
+                "resolution=ignore-duplicates,return=minimal",
             )
             .body(body)
             .send()
@@ -135,11 +136,7 @@ impl SupabaseClient {
         let status = response.status();
 
         if status.is_success() {
-            // Supabase retourne les lignes insérées avec return=representation
-            let inserted_rows: serde_json::Value =
-                response.json().await.unwrap_or(serde_json::json!([]));
-            let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
-            debug!(inserted = count, "Batch poussé avec succès");
+            debug!(pushed = count, "Batch poussé avec succès");
             Ok(count)
         } else {
             let body = response.text().await.unwrap_or_default();
@@ -178,6 +175,7 @@ impl SupabaseClient {
 
         debug!(url = %url, count = payloads.len(), "Push batch sessions");
 
+        let count = payloads.len() as u64;
         let response = self
             .client
             .post(&url)
@@ -186,7 +184,7 @@ impl SupabaseClient {
             .header("Content-Type", "application/json")
             .header(
                 "Prefer",
-                "resolution=ignore-duplicates,return=representation",
+                "resolution=ignore-duplicates,return=minimal",
             )
             .body(body)
             .send()
@@ -195,10 +193,7 @@ impl SupabaseClient {
         let status = response.status();
 
         if status.is_success() {
-            let inserted_rows: serde_json::Value =
-                response.json().await.unwrap_or(serde_json::json!([]));
-            let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
-            debug!(inserted = count, "Sessions poussées avec succès");
+            debug!(pushed = count, "Sessions poussées avec succès");
             Ok(count)
         } else {
             let body = response.text().await.unwrap_or_default();
@@ -233,6 +228,7 @@ impl SupabaseClient {
 
         debug!(url = %url, count = payloads.len(), "Push batch z_reports");
 
+        let count = payloads.len() as u64;
         let response = self
             .client
             .post(&url)
@@ -241,7 +237,7 @@ impl SupabaseClient {
             .header("Content-Type", "application/json")
             .header(
                 "Prefer",
-                "resolution=ignore-duplicates,return=representation",
+                "resolution=ignore-duplicates,return=minimal",
             )
             .body(body)
             .send()
@@ -250,10 +246,7 @@ impl SupabaseClient {
         let status = response.status();
 
         if status.is_success() {
-            let inserted_rows: serde_json::Value =
-                response.json().await.unwrap_or(serde_json::json!([]));
-            let count = inserted_rows.as_array().map_or(0, |a| a.len() as u64);
-            debug!(inserted = count, "Z-reports poussés avec succès");
+            debug!(pushed = count, "Z-reports poussés avec succès");
             Ok(count)
         } else {
             let body = response.text().await.unwrap_or_default();
@@ -270,24 +263,67 @@ impl SupabaseClient {
     // Pull de la configuration
     // -----------------------------------------------------------------------
 
-    /// Récupère la configuration active pour ce site depuis Supabase.
+    /// Récupère uniquement le numéro de version de la config active pour ce site.
     ///
-    /// Interroge la table `site_configs` avec un filtre sur `site_id`.
-    /// Retourne `None` si aucune configuration n'est disponible pour ce site.
-    ///
-    /// # Arguments
-    /// * `site_id` - Identifiant du restaurant.
+    /// Requête légère (select=version uniquement) — appelée à chaque cycle pour
+    /// détecter un changement AVANT de télécharger le menu JSON complet.
     ///
     /// # Errors
     /// - `SyncError::Network` sur erreur réseau
     /// - `SyncError::HttpError` si Supabase retourne un code >= 400
-    pub async fn pull_config(&self, site_id: &str) -> Result<Option<RemoteConfig>, SyncError> {
+    pub async fn pull_config_version(&self, site_id: &str) -> Result<Option<u32>, SyncError> {
+        let url = format!(
+            "{}/rest/v1/site_configs?site_id=eq.{}&select=version&order=version.desc&limit=1",
+            self.base_url, site_id
+        );
+
+        debug!(url = %url, site_id = %site_id, "Pull version config depuis Supabase");
+
+        let response = self
+            .client
+            .get(&url)
+            .header("apikey", &self.service_key)
+            .header("Authorization", format!("Bearer {}", self.service_key))
+            .header("Accept", "application/json")
+            .send()
+            .await?;
+
+        let status = response.status();
+
+        if status == StatusCode::OK {
+            #[derive(serde::Deserialize)]
+            struct VersionOnly {
+                version: u32,
+            }
+            let rows: Vec<VersionOnly> = response.json().await.unwrap_or_default();
+            Ok(rows.into_iter().next().map(|r| r.version))
+        } else if status == StatusCode::NOT_FOUND {
+            Ok(None)
+        } else {
+            let body = response.text().await.unwrap_or_default();
+            Err(SyncError::HttpError {
+                status: status.as_u16(),
+                url,
+                body,
+            })
+        }
+    }
+
+    /// Récupère la configuration complète (menu JSON inclus) pour ce site.
+    ///
+    /// Appeler uniquement après avoir vérifié via `pull_config_version` qu'une
+    /// nouvelle version existe — le menu JSON peut dépasser 50 KB.
+    ///
+    /// # Errors
+    /// - `SyncError::Network` sur erreur réseau
+    /// - `SyncError::HttpError` si Supabase retourne un code >= 400
+    pub async fn pull_config_full(&self, site_id: &str) -> Result<Option<RemoteConfig>, SyncError> {
         let url = format!(
             "{}/rest/v1/site_configs?site_id=eq.{}&select=*&order=version.desc&limit=1",
             self.base_url, site_id
         );
 
-        debug!(url = %url, site_id = %site_id, "Pull config depuis Supabase");
+        debug!(url = %url, site_id = %site_id, "Pull config complète depuis Supabase");
 
         let response = self
             .client
@@ -367,13 +403,16 @@ impl SupabaseClient {
     /// Utilisé au démarrage et avant chaque cycle de sync pour détecter
     /// rapidement le mode offline.
     ///
+    /// HEAD sur /rest/v1/ : pas de corps renvoyé → zéro egress
+    /// (GET retournait le schéma `OpenAPI` complet, ~100-500 KB par cycle)
+    ///
     /// # Returns
     /// `true` si Supabase répond, `false` si inaccessible (mode offline).
     pub async fn is_reachable(&self) -> bool {
         let url = format!("{}/rest/v1/", self.base_url);
         match self
             .client
-            .get(&url)
+            .head(&url)
             .header("apikey", &self.service_key)
             .timeout(Duration::from_secs(5))
             .send()
@@ -406,11 +445,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn push_sessions_all_duplicates_returns_ok_zero() {
+    async fn push_sessions_success_returns_batch_size() {
+        // return=minimal : Supabase ne renvoie pas de corps — le count = taille du batch
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/rest/v1/sessions"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .respond_with(ResponseTemplate::new(200))
             .mount(&server)
             .await;
 
@@ -420,17 +460,15 @@ mod tests {
             make_session_payload("uuid-2", "S0002"),
         ];
         let result = client.push_sessions(&payloads).await;
-        assert_eq!(result.unwrap(), 0);
+        assert_eq!(result.unwrap(), 2);
     }
 
     #[tokio::test]
-    async fn push_sessions_one_inserted_returns_ok_one() {
+    async fn push_sessions_single_payload_returns_one() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/rest/v1/sessions"))
-            .respond_with(
-                ResponseTemplate::new(201).set_body_json(serde_json::json!([{"id": "uuid-1"}])),
-            )
+            .respond_with(ResponseTemplate::new(201))
             .mount(&server)
             .await;
 
