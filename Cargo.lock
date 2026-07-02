@@ -1052,9 +1052,10 @@ dependencies = [
 name = "kds-print-agent"
 version = "0.1.0"
 dependencies = [
- "kds-engine",
+ "axum",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
