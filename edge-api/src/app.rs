@@ -23,6 +23,7 @@ use sqlx::sqlite::SqlitePool;
 use tower_http::trace::TraceLayer;
 
 use fiscal_engine::Journal;
+use kds_engine::broadcaster::KdsBroadcaster;
 
 use crate::{middleware as mw, routes};
 
@@ -41,6 +42,8 @@ pub struct AppState {
     pub db: SqlitePool,
     /// Chemin du répertoire de données local du restaurant.
     pub data_dir: String,
+    /// Broadcaster SSE partagé pour les événements KDS.
+    pub kds_broadcaster: KdsBroadcaster,
 }
 
 impl AppState {
@@ -56,6 +59,7 @@ impl AppState {
             journal: Arc::new(journal),
             db,
             data_dir,
+            kds_broadcaster: KdsBroadcaster::new(),
         }
     }
 }

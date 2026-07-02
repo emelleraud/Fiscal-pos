@@ -31,6 +31,7 @@ use axum::{
 };
 use common::ApiError;
 use fiscal_engine::errors::{ArchiveError, FiscalError, SessionError};
+use kds_engine::KdsError;
 use tracing::error;
 
 /// Wrapper newtype pour implémenter `IntoResponse` sur `FiscalError`.
@@ -60,6 +61,35 @@ impl IntoResponse for ApiErr {
         }
 
         let body = ApiError::new(code, self.0.to_string());
+        (status, Json(body)).into_response()
+    }
+}
+
+/// Wrapper newtype pour implémenter `IntoResponse` sur `KdsError`.
+///
+/// Permet aux handlers KDS de retourner `Result<T, KdsApiErr>` sans
+/// dépendre du `FiscalError` fiscal.
+pub struct KdsApiErr(pub KdsError);
+
+impl From<KdsError> for KdsApiErr {
+    fn from(e: KdsError) -> Self {
+        Self(e)
+    }
+}
+
+impl IntoResponse for KdsApiErr {
+    fn into_response(self) -> Response {
+        let status = match &self.0 {
+            KdsError::NoActiveProfile => StatusCode::CONFLICT,
+            KdsError::StationNotFound(_) => StatusCode::NOT_FOUND,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        if status.is_server_error() {
+            error!(error = %self.0, "Erreur serveur KDS");
+        }
+
+        let body = ApiError::new("KDS_ERROR", self.0.to_string());
         (status, Json(body)).into_response()
     }
 }

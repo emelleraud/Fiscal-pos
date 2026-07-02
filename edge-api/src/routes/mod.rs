@@ -23,6 +23,7 @@
 
 pub mod archive;
 pub mod health;
+pub mod kds;
 pub mod menu;
 pub mod orders;
 pub mod promotions;
@@ -73,5 +74,16 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/archive/:year",
             post(archive::generate_archive_handler),
         )
+        // --- KDS (Kitchen Display System) ---
+        // IMPORTANT : ready_board DOIT précéder :station_id (route littérale avant route paramétrée)
+        .route("/api/v1/kds/feed/ready_board", get(kds::kds_ready_board))
+        .route("/api/v1/kds/feed/:station_id", get(kds::kds_feed))
+        .route("/api/v1/kds/orders/:order_id/ack", post(kds::kds_ack))
+        .route("/api/v1/kds/orders/:order_id/served", post(kds::kds_served))
+        .route(
+            "/api/v1/kds/config",
+            get(kds::kds_get_config).put(kds::kds_set_config),
+        )
+        .route("/api/v1/kds/stations", get(kds::kds_stations))
         .with_state(state)
 }

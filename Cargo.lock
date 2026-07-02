@@ -406,7 +406,9 @@ dependencies = [
  "common",
  "ed25519-dalek",
  "fiscal-engine",
+ "futures-util",
  "hyper",
+ "kds-engine",
  "promo-engine",
  "serde",
  "serde_json",
@@ -416,6 +418,7 @@ dependencies = [
  "thiserror 1.0.69",
  "time",
  "tokio",
+ "tokio-stream",
  "tower",
  "tower-http",
  "tracing",
@@ -2360,6 +2363,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
