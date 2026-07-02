@@ -43,6 +43,7 @@ use fiscal_engine::{
     },
     FiscalEntry,
 };
+use kds_engine::state_machine::{dispatch_order, IncomingOrder};
 use promo_engine::{Cart, CartItem, PromoType, Promotion, Trigger, TvaRateKey};
 
 // ---------------------------------------------------------------------------
@@ -638,7 +639,7 @@ pub async fn create_order_handler(
 /// # Errors
 /// - `422` si `amount_paid_cents < amount_ttc_cents` (paiement insuffisant)
 pub async fn pay_order_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(order_id): Path<String>,
     Json(body): Json<PayOrderRequest>,
 ) -> Result<(StatusCode, Json<PaymentResponse>), ApiErr> {
@@ -661,6 +662,34 @@ pub async fn pay_order_handler(
         }
         .into());
     }
+
+    // Hook KDS — router la commande vers les stations cuisine.
+    //
+    // Dans ce MVP, les line_items ne sont pas stockés dans une table dédiée :
+    // ils ont été agrégés au moment de POST /orders. On dispatche donc avec une
+    // liste de lignes vide. Le routeur KDS ignorera silencieusement les commandes
+    // sans lignes ; la structure est en place pour être enrichie quand une table
+    // order_lines sera ajoutée au schéma.
+    //
+    // order_type : non porté par PayOrderRequest — utilise la valeur par défaut
+    // (EatIn) en attendant qu'il soit stocké lors de la création de la commande.
+    let incoming = IncomingOrder {
+        order_id: order_id.clone(),
+        channel: "caisse".to_string(),
+        order_type: common::OrderType::default(),
+        customer_name: None,
+        external_order_id: None,
+        lines: vec![],
+    };
+
+    // Dispatch asynchrone — ne bloque pas la réponse HTTP.
+    let broadcaster = state.kds_broadcaster.clone();
+    let db = state.db.clone();
+    tokio::spawn(async move {
+        if let Err(e) = dispatch_order(&db, &broadcaster, &incoming).await {
+            tracing::warn!(error = %e, "KDS dispatch non-bloquant échoué");
+        }
+    });
 
     // Réponse de confirmation (la vraie entrée fiscale a été créée dans POST /orders)
     Ok((
