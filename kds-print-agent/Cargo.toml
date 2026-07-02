@@ -3,7 +3,14 @@ name = "kds-print-agent"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "kds-print-agent"
+path = "src/main.rs"
+
 [dependencies]
-kds-engine = { path = "../kds-engine" }
+axum = { workspace = true }
 tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

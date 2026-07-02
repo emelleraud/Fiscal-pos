@@ -125,10 +125,7 @@ impl SupabaseClient {
             .header("Authorization", format!("Bearer {}", self.service_key))
             .header("Content-Type", "application/json")
             // return=minimal : pas de corps en réponse → zéro egress sur les inserts
-            .header(
-                "Prefer",
-                "resolution=ignore-duplicates,return=minimal",
-            )
+            .header("Prefer", "resolution=ignore-duplicates,return=minimal")
             .body(body)
             .send()
             .await?;
@@ -182,10 +179,7 @@ impl SupabaseClient {
             .header("apikey", &self.service_key)
             .header("Authorization", format!("Bearer {}", self.service_key))
             .header("Content-Type", "application/json")
-            .header(
-                "Prefer",
-                "resolution=ignore-duplicates,return=minimal",
-            )
+            .header("Prefer", "resolution=ignore-duplicates,return=minimal")
             .body(body)
             .send()
             .await?;
@@ -235,10 +229,7 @@ impl SupabaseClient {
             .header("apikey", &self.service_key)
             .header("Authorization", format!("Bearer {}", self.service_key))
             .header("Content-Type", "application/json")
-            .header(
-                "Prefer",
-                "resolution=ignore-duplicates,return=minimal",
-            )
+            .header("Prefer", "resolution=ignore-duplicates,return=minimal")
             .body(body)
             .send()
             .await?;

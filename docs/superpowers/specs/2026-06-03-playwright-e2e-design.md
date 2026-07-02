@@ -72,7 +72,7 @@ export default defineConfig({
   "test:e2e:headed": "playwright test --headed"
 },
 "devDependencies": {
-  "@playwright/test": "^1.44.0"
+  "@playwright/test": "^1.60.0"
 }
 ```
 
@@ -91,7 +91,7 @@ Encapsuler tous les sélecteurs et interactions UI. Les specs lisent comme un sc
 | `ensureSessionOpen()` | Détecte "Ouvrir la caisse" → clique si présent, attend OrderScreen |
 | `addItem(name: string)` | Clique sur l'article par texte dans la grille produits |
 | `submitCart()` | Clique "Encaisser …" → attend PaymentScreen |
-| `selectPaymentMethod(m)` | Clique le bouton CB / Espèces / Ticket restaurant |
+| `selectPaymentMethod(m: 'card' \| 'cash' \| 'meal_voucher')` | Clique le bouton CB / Espèces / Ticket restaurant |
 | `confirmPayment()` | Clique "Paiement reçu — valider" → attend TicketScreen |
 | `clickPrint()` | Clique "Imprimer" (fonctionne sur TicketScreen ET ZReportScreen) |
 | `newOrder()` | Clique "Nouvelle commande" → attend OrderScreen |
@@ -143,7 +143,7 @@ clearConsoleLogs(): void {
 ## `e2e/pos-flows.spec.ts`
 
 ```ts
-import { test, expect, browser } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { PosPage } from './pages/PosPage';
 
 test.describe.serial('POS Fiscal — E2E flows', () => {

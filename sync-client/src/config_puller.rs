@@ -48,8 +48,7 @@ pub async fn pull_and_apply_config(
     if remote_version <= local_version {
         debug!(
             remote_version,
-            local_version,
-            "Configuration à jour, pas de mise à jour nécessaire"
+            local_version, "Configuration à jour, pas de mise à jour nécessaire"
         );
         return Ok(false);
     }
