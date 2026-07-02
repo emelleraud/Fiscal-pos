@@ -18,6 +18,10 @@ const navItems: NavItem[] = [
   { to: '/menu',           label: '📤 Config publiée' },
   { divider: true, label: 'Marketing' },
   { to: '/promotions',     label: '🏷️ Promotions' },
+  { divider: true, label: 'Cuisine' },
+  { to: '/kitchen/stations',   label: '📺 Stations KDS' },
+  { to: '/kitchen/routing',    label: '🔀 Règles routage' },
+  { to: '/kitchen/thresholds', label: '⏱ Seuils timer' },
 ]
 
 export default function Layout() {

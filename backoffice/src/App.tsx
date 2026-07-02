@@ -26,6 +26,10 @@ import TechnicalConfigForm from './pages/admin/TechnicalConfigForm'
 import UserList from './pages/admin/UserList'
 import UserForm from './pages/admin/UserForm'
 import PermissionsMatrix from './pages/admin/PermissionsMatrix'
+import KdsStations from './pages/kitchen/KdsStations'
+import KdsStationForm from './pages/kitchen/KdsStationForm'
+import KdsRoutingRules from './pages/kitchen/KdsRoutingRules'
+import KdsTimerThresholds from './pages/kitchen/KdsTimerThresholds'
 
 export default function App() {
   return (
@@ -56,6 +60,12 @@ export default function App() {
                   <Route path="/groups"         element={<GroupList />} />
                   <Route path="/groups/new"     element={<GroupForm />} />
                   <Route path="/groups/:id"     element={<GroupForm />} />
+
+                  <Route path="/kitchen/stations"          element={<KdsStations />} />
+                  <Route path="/kitchen/stations/new"      element={<KdsStationForm />} />
+                  <Route path="/kitchen/stations/:id"      element={<KdsStationForm />} />
+                  <Route path="/kitchen/routing"           element={<KdsRoutingRules />} />
+                  <Route path="/kitchen/thresholds"        element={<KdsTimerThresholds />} />
 
                   <Route element={<AdminRoute />}>
                     <Route path="/admin/sites"            element={<SiteList />} />
