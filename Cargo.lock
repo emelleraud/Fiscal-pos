@@ -1029,6 +1029,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "kds-engine"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 1.0.69",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "kds-print-agent"
+version = "0.1.0"
+dependencies = [
+ "kds-engine",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

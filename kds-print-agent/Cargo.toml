@@ -1,0 +1,9 @@
+[package]
+name = "kds-print-agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kds-engine = { path = "../kds-engine" }
+tokio = { workspace = true }
+tracing = { workspace = true }

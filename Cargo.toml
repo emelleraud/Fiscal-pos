@@ -6,6 +6,8 @@ members = [
     "edge-api",
     "sync-client",
     "common",
+    "kds-engine",
+    "kds-print-agent",
 ]
 
 [profile.release]
@@ -38,3 +40,5 @@ tower-http = { version = "0.6", features = ["trace", "cors"] }
 hyper = { version = "1.4", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 tempfile = "3.10"
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = "0.3"
