@@ -26,6 +26,7 @@ mod client;
 mod config;
 mod config_puller;
 mod error;
+mod kds_puller;
 mod promo_puller;
 mod serializer;
 mod sync_loop;

@@ -33,6 +33,20 @@ use crate::{
     serializer::{FiscalEntryPayload, RemoteConfig, ZReportPayload},
 };
 
+/// Données KDS cloud agrégées pour un site.
+pub struct KdsCloudData {
+    /// Stations KDS du site.
+    pub stations: Vec<serde_json::Value>,
+    /// Profils de routage.
+    pub profiles: Vec<serde_json::Value>,
+    /// Règles de routage.
+    pub rules: Vec<serde_json::Value>,
+    /// Déclencheurs de canaux.
+    pub triggers: Vec<serde_json::Value>,
+    /// Seuils de minuterie.
+    pub thresholds: Vec<serde_json::Value>,
+}
+
 /// Client HTTP pour l'API Supabase REST.
 ///
 /// Thread-safe et clonable (`reqwest::Client` utilise un Arc interne).
@@ -383,6 +397,65 @@ impl SupabaseClient {
 
         let promos: Vec<serde_json::Value> = resp.json().await?;
         Ok(promos)
+    }
+
+    // -----------------------------------------------------------------------
+    // Pull config KDS
+    // -----------------------------------------------------------------------
+
+    /// Helper GET générique — retourne `Vec<Value>` ou vide si la table est vide / inaccessible.
+    ///
+    /// # Errors
+    /// `SyncError::Network` si la requête échoue au niveau réseau ou désérialisation.
+    async fn get_rest_table(&self, endpoint: &str) -> Result<Vec<serde_json::Value>, SyncError> {
+        let url = format!("{}/rest/v1/{}", self.base_url, endpoint);
+        let resp = self
+            .client
+            .get(&url)
+            .header("apikey", &self.service_key)
+            .header("Authorization", format!("Bearer {}", self.service_key))
+            .header("Accept", "application/json")
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            warn!(
+                status = %resp.status(),
+                endpoint = %endpoint,
+                "get_rest_table: HTTP error — retour vide"
+            );
+            return Ok(vec![]);
+        }
+
+        Ok(resp.json().await?)
+    }
+
+    /// Récupère en parallèle toutes les tables KDS cloud pour ce site.
+    ///
+    /// # Errors
+    /// `SyncError::Network` si Supabase est inaccessible.
+    pub async fn pull_kds_config(&self, site_id: &str) -> Result<KdsCloudData, SyncError> {
+        let ep_stations = format!("kds_station_configs?site_id=eq.{site_id}&select=*");
+        let ep_profiles = format!("kds_routing_profiles?site_id=eq.{site_id}&select=*");
+        let ep_rules = format!("kds_routing_configs?site_id=eq.{site_id}&select=*");
+        let ep_triggers = format!("kds_channel_triggers?site_id=eq.{site_id}&select=*");
+        let ep_thresholds = format!("kds_timer_thresholds?site_id=eq.{site_id}&select=*");
+
+        let (stations, profiles, rules, triggers, thresholds) = tokio::try_join!(
+            self.get_rest_table(&ep_stations),
+            self.get_rest_table(&ep_profiles),
+            self.get_rest_table(&ep_rules),
+            self.get_rest_table(&ep_triggers),
+            self.get_rest_table(&ep_thresholds),
+        )?;
+
+        Ok(KdsCloudData {
+            stations,
+            profiles,
+            rules,
+            triggers,
+            thresholds,
+        })
     }
 
     // -----------------------------------------------------------------------

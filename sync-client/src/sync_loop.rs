@@ -57,7 +57,7 @@ use uuid::Uuid;
 
 use crate::{
     client::SupabaseClient, config::SyncConfig, config_puller::pull_and_apply_config,
-    error::SyncError, promo_puller::pull_promotions,
+    error::SyncError, kds_puller::pull_kds_config, promo_puller::pull_promotions,
 };
 use fiscal_engine::journal::store::JournalStore;
 
@@ -225,6 +225,13 @@ pub async fn run_sync_cycle(
         warn!(error = %e, "Échec du pull des promotions (non fatal)");
     } else {
         debug!("Promotions vérifiées depuis Supabase");
+    }
+
+    // 8. Pull de la configuration KDS depuis Supabase → upsert SQLite local
+    if let Err(e) = pull_kds_config(client, config, store.pool_ref()).await {
+        warn!(error = %e, "Échec du pull de la config KDS (non fatal)");
+    } else {
+        debug!("Config KDS vérifiée depuis Supabase");
     }
 
     metrics.duration_ms = cycle_start
