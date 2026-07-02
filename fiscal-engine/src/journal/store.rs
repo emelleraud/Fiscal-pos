@@ -156,6 +156,7 @@ impl JournalStore {
         run("0005", include_str!("../../migrations/0005_multi_tva.sql")).await?;
         run("0006", include_str!("../../migrations/0006_promotions.sql")).await?;
         run("0007", include_str!("../../migrations/0007_order_type.sql")).await?;
+        run("0008", include_str!("../../migrations/0008_kds_schema.sql")).await?;
 
         Ok(())
     }
@@ -1275,5 +1276,30 @@ mod tests {
         assert!(is_leap_year(2024)); // divisible par 4
         assert!(!is_leap_year(1900)); // divisible par 100 mais pas 400
         assert!(!is_leap_year(2023)); // non divisible par 4
+    }
+
+    #[tokio::test]
+    async fn kds_migration_creates_tables() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("Pool SQLite en mémoire");
+        let store = JournalStore::new(pool.clone())
+            .await
+            .expect("Store initialisé");
+        store.run_migrations().await.expect("Migrations appliquées");
+
+        let tables: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'kds_%' ORDER BY name",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("Lecture sqlite_master");
+
+        assert!(tables.contains(&"kds_stations".to_string()));
+        assert!(tables.contains(&"kds_orders".to_string()));
+        assert!(tables.contains(&"kds_order_lines".to_string()));
+        assert!(tables.contains(&"kds_routing_profiles".to_string()));
     }
 }
