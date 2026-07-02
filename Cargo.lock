@@ -1033,6 +1033,7 @@ name = "kds-engine"
 version = "0.1.0"
 dependencies = [
  "common",
+ "reqwest",
  "serde",
  "serde_json",
  "sqlx",
