@@ -155,6 +155,7 @@ impl JournalStore {
         .await?;
         run("0005", include_str!("../../migrations/0005_multi_tva.sql")).await?;
         run("0006", include_str!("../../migrations/0006_promotions.sql")).await?;
+        run("0007", include_str!("../../migrations/0007_order_type.sql")).await?;
 
         Ok(())
     }

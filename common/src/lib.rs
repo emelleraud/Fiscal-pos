@@ -94,6 +94,47 @@ impl std::fmt::Display for OrderId {
 }
 
 // ---------------------------------------------------------------------------
+// Type de commande
+// ---------------------------------------------------------------------------
+
+/// Type de commande — détermine l'ORB cible et les règles de routage KDS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderType {
+    /// Consommation sur place.
+    #[default]
+    EatIn,
+    /// Vente à emporter.
+    Takeaway,
+    /// Commande click & collect.
+    ClickAndCollect,
+    /// Livraison à domicile.
+    Delivery,
+    /// Vente au drive.
+    Drive,
+}
+
+impl OrderType {
+    /// Retourne la valeur TEXT pour `SQLite`.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::EatIn => "eat_in",
+            Self::Takeaway => "takeaway",
+            Self::ClickAndCollect => "click_and_collect",
+            Self::Delivery => "delivery",
+            Self::Drive => "drive",
+        }
+    }
+}
+
+impl std::fmt::Display for OrderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Constantes réglementaires
 // ---------------------------------------------------------------------------
 

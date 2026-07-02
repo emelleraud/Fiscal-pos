@@ -75,6 +75,10 @@ pub struct CreateOrderRequest {
     /// Identifiants de promotions manuelles sélectionnées par le caissier.
     #[serde(default)]
     pub manual_promo_ids: Vec<String>,
+    /// Type de commande — détermine l'ORB cible et les règles de routage KDS.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub order_type: common::OrderType,
 }
 
 /// Corps de la requête de validation de paiement.
