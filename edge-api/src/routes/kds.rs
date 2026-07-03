@@ -217,3 +217,20 @@ pub async fn kds_stations(
 
     Ok(Json(stations))
 }
+
+// ---------------------------------------------------------------------------
+// Heartbeat — POST /api/v1/kds/heartbeat/:station_id
+// ---------------------------------------------------------------------------
+
+/// Enregistre un heartbeat de présence pour une station KDS.
+/// Utilisé par kds-app pour signaler qu'un écran est connecté.
+/// Réponse toujours 204 — aucune validation du `station_id`.
+pub async fn kds_heartbeat(
+    Path(station_id): Path<String>,
+    State(state): State<AppState>,
+) -> StatusCode {
+    state
+        .station_heartbeats
+        .insert(station_id, std::time::Instant::now());
+    StatusCode::NO_CONTENT
+}

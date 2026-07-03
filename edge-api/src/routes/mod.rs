@@ -15,6 +15,7 @@
 //! | GET     | /api/v1/orders/:id               | `get_order_handler`          | Caisse         |
 //! | POST    | /api/v1/orders/:id/pay           | `pay_order_handler`          | Caisse/TPE     |
 //! | POST    | /api/v1/orders/:id/cancel        | `cancel_order_handler`       | Manager        |
+//! | POST    | `/api/v1/kds/heartbeat/:station_id` | `kds_heartbeat`      | KDS screen    |
 //!
 //! ## Niveau d'accès
 //! Toutes les routes sont exposées sur le LAN uniquement (pas d'Internet).
@@ -85,5 +86,9 @@ pub fn build_router(state: AppState) -> Router {
             get(kds::kds_get_config).put(kds::kds_set_config),
         )
         .route("/api/v1/kds/stations", get(kds::kds_stations))
+        .route(
+            "/api/v1/kds/heartbeat/:station_id",
+            post(kds::kds_heartbeat),
+        )
         .with_state(state)
 }

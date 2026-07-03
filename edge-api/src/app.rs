@@ -17,8 +17,10 @@
 //! 4. `TimeoutLayer` — 30 secondes max par requête
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::{middleware, Router};
+use dashmap::DashMap;
 use sqlx::sqlite::SqlitePool;
 use tower_http::trace::TraceLayer;
 
@@ -44,6 +46,10 @@ pub struct AppState {
     pub data_dir: String,
     /// Broadcaster SSE partagé pour les événements KDS.
     pub kds_broadcaster: KdsBroadcaster,
+    /// Derniers heartbeats reçus par station KDS (`station_id` → `Instant`).
+    pub station_heartbeats: Arc<DashMap<String, Instant>>,
+    /// Timeout heartbeat en secondes ; station absente = online (safe-default).
+    pub kds_heartbeat_timeout_secs: u64,
 }
 
 impl AppState {
@@ -55,11 +61,17 @@ impl AppState {
     /// * `data_dir` - Chemin du répertoire de données (menu.json, archives).
     #[must_use]
     pub fn new(journal: Journal, db: SqlitePool, data_dir: String) -> Self {
+        let kds_heartbeat_timeout_secs = std::env::var("KDS_HEARTBEAT_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30);
         Self {
             journal: Arc::new(journal),
             db,
             data_dir,
             kds_broadcaster: KdsBroadcaster::new(),
+            station_heartbeats: Arc::new(DashMap::new()),
+            kds_heartbeat_timeout_secs,
         }
     }
 }

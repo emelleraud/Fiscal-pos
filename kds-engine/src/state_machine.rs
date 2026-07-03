@@ -38,7 +38,6 @@ pub struct IncomingLine {
     pub comment: Option<String>,
 }
 
-#[allow(dead_code)]
 fn is_online(heartbeats: &DashMap<String, Instant>, station_id: &str, timeout_secs: u64) -> bool {
     match heartbeats.get(station_id) {
         None => true,
@@ -46,7 +45,6 @@ fn is_online(heartbeats: &DashMap<String, Instant>, station_id: &str, timeout_se
     }
 }
 
-#[allow(dead_code)]
 fn resolve_effective_station<'a>(
     primary: &'a Station,
     all_stations: &'a [Station],
@@ -74,7 +72,7 @@ fn resolve_effective_station<'a>(
 }
 
 /// Route une commande vers les stations KDS actives et diffuse les événements SSE.
-/// Appeler depuis le handler `POST /orders/:id/pay` ou `POST /orders` selon le trigger.
+/// Applique le failover : si une station est hors délai heartbeat, reroute vers `fallback_station_id`.
 ///
 /// # Errors
 /// Retourne `KdsError::Database` si une écriture `SQLite` échoue.
@@ -82,6 +80,8 @@ pub async fn dispatch_order(
     pool: &SqlitePool,
     broadcaster: &KdsBroadcaster,
     order: &IncomingOrder,
+    heartbeats: &DashMap<String, Instant>,
+    timeout_secs: u64,
 ) -> Result<(), KdsError> {
     let profile_id = routing::active_profile_id(pool).await?;
     let rules = routing::routing_rules_for_profile(pool, &profile_id).await?;
@@ -90,7 +90,7 @@ pub async fn dispatch_order(
     let now_ms = now_ms();
     let order_number_short = generate_short_number(pool, now_ms).await?;
 
-    // Construire la map station_id → lignes filtrées
+    // Phase 1 — résoudre les lignes par station primaire (routing rules)
     let mut station_lines: HashMap<String, Vec<&IncomingLine>> = HashMap::new();
     for line in &order.lines {
         let station_ids =
@@ -100,9 +100,26 @@ pub async fn dispatch_order(
         }
     }
 
-    // Pour chaque station concernée, écrire en SQLite et broadcaster
+    // Phase 2 — appliquer le failover : accumuler les lignes par station effective
+    let mut effective_lines: HashMap<String, Vec<&IncomingLine>> = HashMap::new();
     for station in &stations {
         let Some(lines) = station_lines.get(&station.id) else {
+            continue;
+        };
+        let Some(effective) =
+            resolve_effective_station(station, &stations, heartbeats, timeout_secs)
+        else {
+            continue;
+        };
+        effective_lines
+            .entry(effective.id.clone())
+            .or_default()
+            .extend(lines.iter().copied());
+    }
+
+    // Phase 3 — dispatcher une seule fois par station effective
+    for station in &stations {
+        let Some(lines) = effective_lines.get(&station.id) else {
             continue;
         };
 
@@ -123,7 +140,6 @@ pub async fn dispatch_order(
         );
         broadcaster.send(KdsEvent::OrderNew(payload));
 
-        // Impression si la station a une imprimante
         if matches!(
             station.role,
             StationRole::Preparation | StationRole::Holding

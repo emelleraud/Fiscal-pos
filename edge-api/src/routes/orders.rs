@@ -685,8 +685,12 @@ pub async fn pay_order_handler(
     // Dispatch asynchrone — ne bloque pas la réponse HTTP.
     let broadcaster = state.kds_broadcaster.clone();
     let db = state.db.clone();
+    let heartbeats = state.station_heartbeats.clone();
+    let timeout_secs = state.kds_heartbeat_timeout_secs;
     tokio::spawn(async move {
-        if let Err(e) = dispatch_order(&db, &broadcaster, &incoming).await {
+        if let Err(e) =
+            dispatch_order(&db, &broadcaster, &incoming, &heartbeats, timeout_secs).await
+        {
             tracing::warn!(error = %e, "KDS dispatch non-bloquant échoué");
         }
     });

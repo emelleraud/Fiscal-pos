@@ -566,3 +566,32 @@ fn current_year() -> u32 {
         1970 + (secs / (365 * 24 * 3600 + 20952)) as u32
     }
 }
+
+// ---------------------------------------------------------------------------
+// KDS Heartbeat — POST /api/v1/kds/heartbeat/:station_id
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[serial]
+async fn heartbeat_returns_204() {
+    let (app, _db) = setup().await;
+    let resp = app
+        .oneshot(empty_request(Method::POST, "/api/v1/kds/heartbeat/grill"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+#[serial]
+async fn heartbeat_unknown_station_returns_204() {
+    let (app, _db) = setup().await;
+    let resp = app
+        .oneshot(empty_request(
+            Method::POST,
+            "/api/v1/kds/heartbeat/station-inconnue",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
