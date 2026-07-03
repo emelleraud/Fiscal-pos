@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn routing_rule_priority_ordering() {
-        let mut rules = vec![
+        let mut rules = [
             RoutingRule {
                 id: "r2".to_string(),
                 profile_id: "p".to_string(),

@@ -77,6 +77,9 @@ pub struct ArchiveResponse {
 /// - `404 Not Found` — aucune transaction pour l'année
 /// - `409 Conflict` — archive déjà générée pour cette année
 /// - `503 Service Unavailable` — `FISCAL_SIGNING_KEY_HEX` manquant
+///
+/// # Errors
+/// Returns [`ApiErr`] on fiscal engine or database errors.
 pub async fn generate_archive_handler(
     Path(year): Path<u32>,
     State(state): State<AppState>,

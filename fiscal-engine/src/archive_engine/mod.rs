@@ -530,14 +530,14 @@ mod tests {
                 .record_transaction(FiscalEntryData {
                     session_id: session.id,
                     operation_type: OperationType::Sale,
-                    amount_ttc_cents: Cents((i * 100) as i64),
+                    amount_ttc_cents: Cents((i * 100).cast_signed()),
                     tva_breakdown: TvaBreakdown::from_ttc(
-                        Cents((i * 100) as i64),
+                        Cents((i * 100).cast_signed()),
                         TvaRate::Intermediaire10,
                     ),
                     tva_5_5_breakdown: TvaBreakdown::zero(TvaRate::Reduit5_5),
                     tva_10_breakdown: TvaBreakdown::from_ttc(
-                        Cents((i * 100) as i64),
+                        Cents((i * 100).cast_signed()),
                         TvaRate::Intermediaire10,
                     ),
                     tva_20_breakdown: TvaBreakdown::zero(TvaRate::Normal20),
@@ -856,6 +856,9 @@ mod tests {
             .unwrap_or_default()
             .as_secs();
         // Approximation : 365.25 jours/an en moyenne
-        1970 + (secs / (365 * 24 * 3600 + 20952)) as u32
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            1970 + (secs / (365 * 24 * 3600 + 20952)) as u32
+        }
     }
 }

@@ -1,6 +1,6 @@
 //! Tests d'intégration de l'edge-api.
 //!
-//! Chaque test monte une application Axum complète avec SQLite in-memory.
+//! Chaque test monte une application Axum complète avec `SQLite` in-memory.
 //! Les requêtes sont envoyées via `tower::ServiceExt::oneshot` — pas de réseau.
 
 use axum::{
@@ -20,7 +20,7 @@ use serial_test::serial;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Crée une app de test avec une base SQLite dans un fichier temporaire.
+/// Crée une app de test avec une base `SQLite` dans un fichier temporaire.
 ///
 /// On utilise un vrai fichier (pas `:memory:`) car `record_transaction()`
 /// ouvre une transaction ET lit le pool en parallèle — ce qui deadlockerait
@@ -41,6 +41,7 @@ async fn setup() -> (axum::Router, NamedTempFile) {
     (build_app(state), db_file)
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn json_request(method: Method, uri: &str, body: Value) -> Request<Body> {
     Request::builder()
         .method(method)
@@ -542,7 +543,7 @@ async fn archive_generates_and_returns_409_on_duplicate() {
     let body = body_json(resp1).await;
     assert!(body["csv_hash_hex"].is_string());
     assert!(body["signature_hex"].is_string());
-    assert_eq!(body["year"], year as i64);
+    assert_eq!(body["year"], i64::from(year));
 
     // Deuxième tentative → 409
     let resp2 = app
@@ -560,5 +561,8 @@ fn current_year() -> u32 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    1970 + (secs / (365 * 24 * 3600 + 20952)) as u32
+    #[allow(clippy::cast_possible_truncation)]
+    {
+        1970 + (secs / (365 * 24 * 3600 + 20952)) as u32
+    }
 }

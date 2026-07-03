@@ -718,7 +718,7 @@ mod tests {
 
         for i in 1..=1000_u64 {
             journal
-                .record_transaction(sale_data(session.id, (i * 100) as i64))
+                .record_transaction(sale_data(session.id, (i * 100).cast_signed()))
                 .await
                 .unwrap_or_else(|e| panic!("Vente {i} échouée : {e}"));
         }
@@ -766,7 +766,7 @@ mod tests {
 
         for i in 1..=5_u64 {
             journal
-                .record_transaction(sale_data(session.id, (i * 100) as i64))
+                .record_transaction(sale_data(session.id, (i * 100).cast_signed()))
                 .await
                 .expect("Vente");
         }

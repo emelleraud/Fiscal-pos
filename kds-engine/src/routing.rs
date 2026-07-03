@@ -184,7 +184,10 @@ mod tests {
             profile_id: "normal".to_string(),
             rule_type,
             match_value: match_value.to_string(),
-            station_ids: station_ids.iter().map(|s| s.to_string()).collect(),
+            station_ids: station_ids
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             priority,
         }
     }

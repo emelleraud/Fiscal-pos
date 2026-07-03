@@ -81,6 +81,10 @@ impl SupabaseClient {
     }
 
     /// Constructeur pour les tests — pointe vers un serveur HTTP local (wiremock, sans `https_only`).
+    ///
+    /// # Panics
+    /// Panics if the underlying `reqwest` client cannot be built (TLS initialisation failure).
+    #[must_use]
     #[allow(dead_code)]
     pub fn new_for_test(base_url: &str, service_key: &str) -> Self {
         let client = Client::builder()

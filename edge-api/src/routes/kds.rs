@@ -92,6 +92,9 @@ pub struct AckBody {
 }
 
 /// Acquitte une commande ou une ligne pour une station KDS donnée.
+///
+/// # Errors
+/// Returns [`KdsApiErr`] on database or broadcast errors.
 pub async fn kds_ack(
     Path(order_id): Path<String>,
     State(state): State<AppState>,
@@ -122,6 +125,9 @@ pub struct ServedBody {
 }
 
 /// Marque une commande comme servie (2e bump expo).
+///
+/// # Errors
+/// Returns [`KdsApiErr`] on database or broadcast errors.
 pub async fn kds_served(
     Path(order_id): Path<String>,
     State(state): State<AppState>,
@@ -151,6 +157,9 @@ pub struct KdsConfig {
 }
 
 /// Retourne la configuration KDS active (profil de service).
+///
+/// # Errors
+/// Returns [`KdsApiErr`] on database errors.
 pub async fn kds_get_config(State(state): State<AppState>) -> Result<Json<KdsConfig>, KdsApiErr> {
     let profile = routing::active_profile_id(&state.db)
         .await
@@ -173,6 +182,9 @@ pub struct SetProfileBody {
 }
 
 /// Met à jour le profil de service actif.
+///
+/// # Errors
+/// Returns [`KdsApiErr`] on database errors.
 pub async fn kds_set_config(
     State(state): State<AppState>,
     Json(body): Json<SetProfileBody>,
@@ -189,6 +201,9 @@ pub async fn kds_set_config(
 // ---------------------------------------------------------------------------
 
 /// Retourne la liste des stations actives pour le profil courant.
+///
+/// # Errors
+/// Returns [`KdsApiErr`] on database errors.
 pub async fn kds_stations(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<kds_engine::types::station::Station>>, KdsApiErr> {

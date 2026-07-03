@@ -114,6 +114,9 @@ pub struct ZReportSummary {
 /// # Responses
 /// - `200 OK` avec `SessionResponse` si une session est active
 /// - `404 Not Found` si aucune session n'est ouverte
+///
+/// # Errors
+/// Returns [`ApiErr`] on fiscal engine or database errors.
 pub async fn get_current_session_handler(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<SessionResponse>), ApiErr> {
@@ -151,6 +154,9 @@ pub async fn get_current_session_handler(
 /// # Responses
 /// - `201 Created` avec `SessionResponse`
 /// - `409 Conflict` si une session est déjà ouverte (`SESSION_ALREADY_ACTIVE`)
+///
+/// # Errors
+/// Returns [`ApiErr`] on fiscal engine or database errors.
 pub async fn open_session_handler(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<SessionResponse>), ApiErr> {
@@ -187,6 +193,9 @@ pub async fn open_session_handler(
 /// # Responses
 /// - `200 OK` avec `CloseSessionResponse` (rapport Z inclus)
 /// - `409 Conflict` si aucune session n'est active (`NO_ACTIVE_SESSION`)
+///
+/// # Errors
+/// Returns [`ApiErr`] on fiscal engine or database errors.
 pub async fn close_session_handler(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<CloseSessionResponse>), ApiErr> {

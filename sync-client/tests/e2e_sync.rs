@@ -14,7 +14,7 @@ use tempfile::NamedTempFile;
 
 fn make_config(db_path: &str) -> SyncConfig {
     SyncConfig {
-        database_url: format!("sqlite:{}", db_path),
+        database_url: format!("sqlite:{db_path}"),
         supabase_url: env::var("SUPABASE_URL").expect("SUPABASE_URL requis"),
         supabase_service_key: env::var("SUPABASE_SERVICE_KEY")
             .expect("SUPABASE_SERVICE_KEY requis"),
@@ -32,7 +32,7 @@ fn make_config(db_path: &str) -> SyncConfig {
 async fn setup_db(db_path: &str) -> JournalStore {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
-        .connect(&format!("sqlite:{}", db_path))
+        .connect(&format!("sqlite:{db_path}"))
         .await
         .expect("Impossible d'ouvrir SQLite");
     let store = JournalStore::new(pool)
@@ -112,7 +112,7 @@ async fn verify_session_in_supabase(config: &SyncConfig, session_uuid: &str) -> 
         .await
         .expect("GET sessions echoue");
     let rows: serde_json::Value = resp.json().await.expect("JSON invalide");
-    rows.as_array().map(|a| !a.is_empty()).unwrap_or(false)
+    rows.as_array().is_some_and(|a| !a.is_empty())
 }
 
 async fn count_entries_in_supabase(config: &SyncConfig, session_uuid: &str) -> usize {
@@ -133,7 +133,7 @@ async fn count_entries_in_supabase(config: &SyncConfig, session_uuid: &str) -> u
         .await
         .expect("GET fiscal_entries echoue");
     let rows: serde_json::Value = resp.json().await.expect("JSON invalide");
-    rows.as_array().map(|a| a.len()).unwrap_or(0)
+    rows.as_array().map_or(0, Vec::len)
 }
 
 async fn cleanup_supabase(config: &SyncConfig, _session_uuid: &str) {
@@ -156,7 +156,7 @@ async fn cleanup_supabase(config: &SyncConfig, _session_uuid: &str) {
     {
         Ok(r) if r.status().is_success() => println!("[cleanup] delete_test_data() OK"),
         Ok(r) => println!("[cleanup] AVERTISSEMENT status={}", r.status()),
-        Err(e) => println!("[cleanup] ERREUR : {}", e),
+        Err(e) => println!("[cleanup] ERREUR : {e}"),
     }
 }
 
@@ -177,7 +177,7 @@ async fn test_e2e_sync_sqlite_to_supabase() {
     println!("[pre-cleanup] Suppression données résiduelles...");
     cleanup_supabase(&config, "").await;
 
-    println!("[setup] SQLite   : {}", db_path);
+    println!("[setup] SQLite   : {db_path}");
     println!("[setup] Site ID  : {}", config.site_id);
     println!("[setup] Supabase : {}", config.supabase_url);
 
@@ -186,9 +186,9 @@ async fn test_e2e_sync_sqlite_to_supabase() {
 
     let (session_uuid, entry_uuids) = seed_local_db(&store).await;
     let suuid = session_uuid.to_string();
-    println!("[seed] Session : {}", suuid);
+    println!("[seed] Session : {suuid}");
     for (i, uid) in entry_uuids.iter().enumerate() {
-        println!("[seed] Entree #{} : {}", i + 1, uid);
+        println!("[seed] Entree #{} : {uid}", i + 1);
     }
 
     assert_eq!(store.load_unsynced_sessions().await.unwrap().len(), 1);
@@ -250,7 +250,7 @@ async fn test_e2e_sync_sqlite_to_supabase() {
     println!("\n=== TEST E2E REUSSI ===\n");
 }
 
-/// Simule un crash entre push_sessions réussi et mark_sessions_synced.
+/// Simule un crash entre `push_sessions` réussi et `mark_sessions_synced`.
 /// La session est déjà dans Supabase mais encore synced=0 localement.
 /// Le cycle suivant doit réussir : ignore-duplicates retourne [], la session
 /// est marquée synced et les entrées sont poussées sans erreur FK.
@@ -278,7 +278,7 @@ async fn test_e2e_idempotence_crash_recovery() {
 
     let (session_uuid, _entry_uuids) = seed_local_db(&store).await;
     let suuid = session_uuid.to_string();
-    println!("[seed] Session : {}", suuid);
+    println!("[seed] Session : {suuid}");
 
     // Étape 1 : pousser la session vers Supabase sans appeler mark_sessions_synced
     // (simule un crash entre les deux opérations)

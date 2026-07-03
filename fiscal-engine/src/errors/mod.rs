@@ -303,11 +303,11 @@ mod tests {
         let fiscal_err = FiscalError::from(int_err);
         let msg = fiscal_err.to_string();
         assert!(
-            msg.contains("5"),
+            msg.contains('5'),
             "Le message doit contenir la séquence attendue"
         );
         assert!(
-            msg.contains("7"),
+            msg.contains('7'),
             "Le message doit contenir la séquence trouvée"
         );
     }

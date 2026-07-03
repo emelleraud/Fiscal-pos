@@ -21,7 +21,7 @@ use sync_client::{client::SupabaseClient, config::SyncConfig, sync_loop::run_syn
 async fn setup_store(db_path: &str) -> JournalStore {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
-        .connect(&format!("sqlite:{}", db_path))
+        .connect(&format!("sqlite:{db_path}"))
         .await
         .expect("open sqlite");
     let store = JournalStore::new(pool).await.expect("JournalStore::new");
@@ -31,7 +31,7 @@ async fn setup_store(db_path: &str) -> JournalStore {
 
 fn make_config(db_path: &str, supabase_url: &str) -> SyncConfig {
     SyncConfig {
-        database_url: format!("sqlite:{}", db_path),
+        database_url: format!("sqlite:{db_path}"),
         supabase_url: supabase_url.to_string(),
         supabase_service_key: "test-key".to_string(),
         site_id: "SITE-001".to_string(),

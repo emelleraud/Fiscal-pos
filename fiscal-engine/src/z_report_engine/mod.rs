@@ -749,7 +749,7 @@ mod tests {
         let session = journal.open_session().await.expect("Session");
         for i in 1..=5_u64 {
             journal
-                .record_transaction(sale(session.id, (i * 110) as i64))
+                .record_transaction(sale(session.id, (i * 110).cast_signed()))
                 .await
                 .expect("Vente");
         }
