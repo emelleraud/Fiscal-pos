@@ -42,3 +42,4 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 tempfile = "3.10"
 tokio-stream = { version = "0.1", features = ["sync"] }
 futures-util = "0.3"
+dashmap = "6"
