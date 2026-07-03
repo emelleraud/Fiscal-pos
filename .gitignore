@@ -38,3 +38,25 @@ pos-app/electron/*.js
 # Playwright
 pos-app/test-results/
 pos-app/playwright-report/
+
+# Claude Code / Superpowers
+.claude/
+.superpowers/
+
+# Supabase CLI temp
+supabase/.temp/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# SQLite backups
+*.db.bak
+*.db.bak-shm
+*.db.bak-wal
+
+# Local data & test fixtures
+data/archives/
+sync-client/test_data/
+
+# Generated reports
+RAPPORT.md
