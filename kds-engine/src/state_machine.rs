@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
+use dashmap::DashMap;
 use sqlx::SqlitePool;
 
 use crate::{
@@ -34,6 +36,41 @@ pub struct IncomingLine {
     pub parent_line_id: Option<String>,
     pub line_type: LineType,
     pub comment: Option<String>,
+}
+
+#[allow(dead_code)]
+fn is_online(heartbeats: &DashMap<String, Instant>, station_id: &str, timeout_secs: u64) -> bool {
+    match heartbeats.get(station_id) {
+        None => true,
+        Some(last_seen) => last_seen.elapsed().as_secs() < timeout_secs,
+    }
+}
+
+#[allow(dead_code)]
+fn resolve_effective_station<'a>(
+    primary: &'a Station,
+    all_stations: &'a [Station],
+    heartbeats: &DashMap<String, Instant>,
+    timeout_secs: u64,
+) -> Option<&'a Station> {
+    if is_online(heartbeats, &primary.id, timeout_secs) {
+        return Some(primary);
+    }
+    let Some(ref fid) = primary.fallback_station_id else {
+        tracing::warn!(station_id = %primary.id, "station down, no fallback configured");
+        return None;
+    };
+    match all_stations.iter().find(|s| &s.id == fid) {
+        Some(fallback) if is_online(heartbeats, &fallback.id, timeout_secs) => Some(fallback),
+        _ => {
+            tracing::warn!(
+                station_id = %primary.id,
+                fallback_id = %fid,
+                "station down, fallback also down or not in profile"
+            );
+            None
+        }
+    }
 }
 
 /// Route une commande vers les stations KDS actives et diffuse les événements SSE.
@@ -356,4 +393,130 @@ pub async fn mark_served(
     ));
 
     Ok(())
+}
+
+#[cfg(test)]
+mod failover_tests {
+    use super::{is_online, resolve_effective_station};
+    use crate::types::station::{OutputType, Station, StationRole};
+    use dashmap::DashMap;
+    use std::time::{Duration, Instant};
+
+    fn station(id: &str, fallback: Option<&str>) -> Station {
+        Station {
+            id: id.to_string(),
+            name: id.to_string(),
+            role: StationRole::Preparation,
+            temperature_group: None,
+            output_type: OutputType::Screen,
+            printer_address: None,
+            printer_type: None,
+            printer_mode: None,
+            paper_width_mm: None,
+            fallback_station_id: fallback.map(str::to_string),
+            active_in_profiles: vec!["normal".to_string()],
+            sort_order: 1,
+            enabled: true,
+        }
+    }
+
+    #[test]
+    fn is_online_absent_means_online() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        assert!(is_online(&hb, "grill", 30));
+    }
+
+    #[test]
+    fn is_online_recent_heartbeat() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        hb.insert("grill".to_string(), Instant::now());
+        assert!(is_online(&hb, "grill", 30));
+    }
+
+    #[test]
+    fn is_online_respects_timeout() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        hb.insert(
+            "grill".to_string(),
+            Instant::now()
+                .checked_sub(Duration::from_secs(31))
+                .unwrap(),
+        );
+        assert!(!is_online(&hb, "grill", 30));
+    }
+
+    #[test]
+    fn resolve_returns_primary_when_online() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        hb.insert("grill".to_string(), Instant::now());
+        let primary = station("grill", Some("cold"));
+        let all = vec![primary.clone(), station("cold", None)];
+        let result = resolve_effective_station(&primary, &all, &hb, 30);
+        assert_eq!(result.map(|s| s.id.as_str()), Some("grill"));
+    }
+
+    #[test]
+    fn resolve_returns_fallback_when_primary_down() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        hb.insert(
+            "grill".to_string(),
+            Instant::now()
+                .checked_sub(Duration::from_secs(31))
+                .unwrap(),
+        );
+        hb.insert("cold".to_string(), Instant::now());
+        let primary = station("grill", Some("cold"));
+        let all = vec![primary.clone(), station("cold", None)];
+        let result = resolve_effective_station(&primary, &all, &hb, 30);
+        assert_eq!(result.map(|s| s.id.as_str()), Some("cold"));
+    }
+
+    #[test]
+    fn resolve_returns_none_when_no_fallback_configured() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        hb.insert(
+            "grill".to_string(),
+            Instant::now()
+                .checked_sub(Duration::from_secs(31))
+                .unwrap(),
+        );
+        let primary = station("grill", None);
+        let all = vec![primary.clone()];
+        assert!(resolve_effective_station(&primary, &all, &hb, 30).is_none());
+    }
+
+    #[test]
+    fn resolve_returns_none_when_fallback_also_down() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        hb.insert(
+            "grill".to_string(),
+            Instant::now()
+                .checked_sub(Duration::from_secs(31))
+                .unwrap(),
+        );
+        hb.insert(
+            "cold".to_string(),
+            Instant::now()
+                .checked_sub(Duration::from_secs(31))
+                .unwrap(),
+        );
+        let primary = station("grill", Some("cold"));
+        let all = vec![primary.clone(), station("cold", None)];
+        assert!(resolve_effective_station(&primary, &all, &hb, 30).is_none());
+    }
+
+    #[test]
+    fn resolve_returns_none_when_fallback_not_in_profile() {
+        let hb: DashMap<String, Instant> = DashMap::new();
+        hb.insert(
+            "grill".to_string(),
+            Instant::now()
+                .checked_sub(Duration::from_secs(31))
+                .unwrap(),
+        );
+        // "cold" n'est pas dans all_stations (non dans le profil actif)
+        let primary = station("grill", Some("cold"));
+        let all = vec![primary.clone()];
+        assert!(resolve_effective_station(&primary, &all, &hb, 30).is_none());
+    }
 }
