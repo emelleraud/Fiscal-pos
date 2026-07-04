@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import { useSite } from '../../context/SiteContext'
+import { useAuth } from '../../context/AuthContext'
 
 interface ChannelTrigger {
   channel: string
@@ -28,18 +29,16 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
   click_and_collect: 'Click & Collect',
 }
 
-const TRIGGER_LABEL: Record<string, string> = {
-  order: 'Commande',
-  payment: 'Paiement',
-  both: 'Les deux',
-}
-
 export default function KdsChannelTriggers() {
   const [triggers, setTriggers] = useState<ChannelTrigger[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [edited, setEdited] = useState<Record<TriggerKey, ChannelTrigger>>({})
+  const [saving, setSaving] = useState<TriggerKey | null>(null)
 
   const { activeSiteId } = useSite()
+  const { role } = useAuth()
+  const canWrite = role === 'pos_admin' || role === 'regional_director'
 
   const load = () => {
     if (!activeSiteId) { setLoading(false); return }
@@ -57,6 +56,37 @@ export default function KdsChannelTriggers() {
   }
 
   useEffect(load, [activeSiteId])
+
+  const getEdited = (t: ChannelTrigger): ChannelTrigger => edited[rowKey(t)] ?? t
+  const isDirty = (t: ChannelTrigger): boolean =>
+    JSON.stringify(getEdited(t)) !== JSON.stringify(t)
+
+  const handleChange = (
+    key: TriggerKey,
+    base: ChannelTrigger,
+    field: 'trigger_on' | 'orb_type',
+    val: string,
+  ) => {
+    setEdited(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? base), [field]: val || null },
+    }))
+  }
+
+  const handleSave = async (key: TriggerKey) => {
+    const t = edited[key]
+    if (!t || !activeSiteId) return
+    setSaving(key); setError(null)
+    const { error: e } = await supabase
+      .from('kds_channel_triggers')
+      .upsert({ site_id: activeSiteId, ...t }, { onConflict: 'site_id,channel,order_type' })
+    if (e) setError(e.message)
+    else {
+      setEdited(prev => { const n = { ...prev }; delete n[key]; return n })
+      load()
+    }
+    setSaving(null)
+  }
 
   if (!activeSiteId) return <p style={{ padding: '1.5rem', color: '#888' }}>Sélectionner un site</p>
   if (loading) return <p style={{ padding: '1.5rem', color: '#888' }}>Chargement…</p>
@@ -82,9 +112,41 @@ export default function KdsChannelTriggers() {
             <tr key={rowKey(t)} style={{ borderBottom: '1px solid #f0f0f0' }}>
               <td style={{ padding: '0.6rem 0.8rem', fontWeight: 500 }}>{CHANNEL_LABEL[t.channel] ?? t.channel}</td>
               <td style={{ padding: '0.6rem 0.8rem' }}>{ORDER_TYPE_LABEL[t.order_type] ?? t.order_type}</td>
-              <td style={{ padding: '0.6rem 0.8rem', color: '#555' }}>{TRIGGER_LABEL[t.trigger_on]}</td>
-              <td style={{ padding: '0.6rem 0.8rem', color: '#555' }}>{t.orb_type ?? '—'}</td>
-              <td style={{ padding: '0.6rem 0.8rem' }}></td>
+              <td style={{ padding: '0.6rem 0.8rem' }}>
+                <select
+                  value={getEdited(t).trigger_on}
+                  disabled={!canWrite}
+                  onChange={ev => handleChange(rowKey(t), t, 'trigger_on', ev.target.value)}
+                  style={{ padding: '0.3rem 0.5rem', border: '1px solid #ddd', borderRadius: 4, fontSize: '0.85rem' }}
+                >
+                  <option value="order">Commande</option>
+                  <option value="payment">Paiement</option>
+                  <option value="both">Les deux</option>
+                </select>
+              </td>
+              <td style={{ padding: '0.6rem 0.8rem' }}>
+                <select
+                  value={getEdited(t).orb_type ?? ''}
+                  disabled={!canWrite}
+                  onChange={ev => handleChange(rowKey(t), t, 'orb_type', ev.target.value)}
+                  style={{ padding: '0.3rem 0.5rem', border: '1px solid #ddd', borderRadius: 4, fontSize: '0.85rem' }}
+                >
+                  <option value="">—</option>
+                  <option value="client">client</option>
+                  <option value="livreur">livreur</option>
+                </select>
+              </td>
+              <td style={{ padding: '0.6rem 0.8rem' }}>
+                {canWrite && isDirty(t) && (
+                  <button
+                    onClick={() => handleSave(rowKey(t))}
+                    disabled={saving === rowKey(t)}
+                    style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 4, padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem' }}
+                  >
+                    {saving === rowKey(t) ? '…' : 'Enregistrer'}
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
           {triggers.length === 0 && (
