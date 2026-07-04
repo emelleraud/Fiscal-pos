@@ -38,7 +38,28 @@ async fn setup() -> (axum::Router, NamedTempFile) {
 
     let journal = Journal::open(pool.clone()).await.expect("journal");
     let state = AppState::new(journal, pool, "/tmp".to_string());
-    (build_app(state), db_file)
+    (build_app(state, "./kds-app/dist".to_string()), db_file)
+}
+
+async fn setup_with_kds() -> (axum::Router, NamedTempFile, tempfile::TempDir) {
+    let db_file = NamedTempFile::new().expect("tempfile SQLite");
+    let db_path = db_file.path().to_str().unwrap().to_string();
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(&format!("sqlite:{db_path}"))
+        .await
+        .expect("pool SQLite");
+
+    let journal = Journal::open(pool.clone()).await.expect("journal");
+    let state = AppState::new(journal, pool, "/tmp".to_string());
+
+    let kds_dir = tempfile::TempDir::new().expect("tempdir kds");
+    std::fs::write(kds_dir.path().join("index.html"), "<html>KDS</html>")
+        .expect("écriture index.html");
+    let kds_dist = kds_dir.path().to_str().unwrap().to_string();
+
+    (build_app(state, kds_dist), db_file, kds_dir)
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -594,4 +615,28 @@ async fn heartbeat_unknown_station_returns_204() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}
+
+// ---------------------------------------------------------------------------
+// KDS static SPA — GET /kds/*
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn kds_root_returns_200() {
+    let (app, _db, _kds_dir) = setup_with_kds().await;
+    let resp = app
+        .oneshot(empty_request(Method::GET, "/kds/"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn kds_spa_fallback_returns_index() {
+    let (app, _db, _kds_dir) = setup_with_kds().await;
+    let resp = app
+        .oneshot(empty_request(Method::GET, "/kds/une-route-inconnue"))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
 }

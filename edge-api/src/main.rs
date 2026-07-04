@@ -35,6 +35,7 @@ struct Config {
     database_url: String,
     data_dir: String,
     log_json: bool,
+    kds_app_dist: String,
 }
 
 impl Config {
@@ -49,6 +50,8 @@ impl Config {
                 .unwrap_or_else(|_| "sqlite:./restaurant.db".to_string()),
             data_dir: std::env::var("DATA_DIR").unwrap_or_else(|_| "./data".to_string()),
             log_json: std::env::var("RUST_LOG_FORMAT").as_deref() == Ok("json"),
+            kds_app_dist: std::env::var("KDS_APP_DIST")
+                .unwrap_or_else(|_| "./kds-app/dist".to_string()),
         }
     }
 }
@@ -98,7 +101,7 @@ async fn main() {
     }
 
     let state = AppState::new(journal, db, config.data_dir.clone());
-    let app = build_app(state);
+    let app = build_app(state, config.kds_app_dist);
 
     let addr: SocketAddr = format!("{}:{}", config.host, config.port)
         .parse()

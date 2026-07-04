@@ -88,8 +88,8 @@ impl AppState {
 /// Note : le timeout par requête est géré dans le middleware `request_id_middleware`
 /// via `tokio::time::timeout` plutôt que `tower::timeout::TimeoutLayer`, pour
 /// éviter les incompatibilités de types avec axum 0.7.
-pub fn build_app(state: AppState) -> Router {
-    routes::build_router(state)
+pub fn build_app(state: AppState, kds_dist: String) -> Router {
+    routes::build_router(state, kds_dist)
         .layer(middleware::from_fn(mw::request_id_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(mw::cors_layer())
