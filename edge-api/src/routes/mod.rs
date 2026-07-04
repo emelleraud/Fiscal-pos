@@ -16,6 +16,7 @@
 //! | POST    | /api/v1/orders/:id/pay           | `pay_order_handler`          | Caisse/TPE     |
 //! | POST    | /api/v1/orders/:id/cancel        | `cancel_order_handler`       | Manager        |
 //! | POST    | `/api/v1/kds/heartbeat/:station_id` | `kds_heartbeat`      | KDS screen    |
+//! | GET     | `/kds/*`                              | `ServeDir` (kds-app SPA) | KDS screen     |
 //!
 //! ## Niveau d'accès
 //! Toutes les routes sont exposées sur le LAN uniquement (pas d'Internet).
@@ -34,11 +35,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use std::path::Path;
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::app::AppState;
 
 /// Construit le routeur Axum complet avec toutes les routes de l'API.
-pub fn build_router(state: AppState) -> Router {
+pub fn build_router(state: AppState, kds_dist: String) -> Router {
     Router::new()
         // --- Health ---
         .route("/api/v1/health", get(health::health_handler))
@@ -90,5 +93,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/kds/heartbeat/:station_id",
             post(kds::kds_heartbeat),
         )
+        // --- kds-app SPA statique ---
+        .nest_service("/kds", {
+            let index_html = Path::new(&kds_dist).join("index.html");
+            ServeDir::new(kds_dist).fallback(ServeFile::new(index_html))
+        })
         .with_state(state)
 }
