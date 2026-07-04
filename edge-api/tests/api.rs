@@ -38,7 +38,7 @@ async fn setup() -> (axum::Router, NamedTempFile) {
 
     let journal = Journal::open(pool.clone()).await.expect("journal");
     let state = AppState::new(journal, pool, "/tmp".to_string());
-    (build_app(state, "./kds-app/dist".to_string()), db_file)
+    (build_app(state, "/tmp".to_string()), db_file)
 }
 
 async fn setup_with_kds() -> (axum::Router, NamedTempFile, tempfile::TempDir) {
@@ -620,6 +620,18 @@ async fn heartbeat_unknown_station_returns_204() {
 // ---------------------------------------------------------------------------
 // KDS static SPA — GET /kds/*
 // ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn kds_bare_path_redirects_or_serves() {
+    let (app, _db, _kds_dir) = setup_with_kds().await;
+    let resp = app
+        .oneshot(empty_request(Method::GET, "/kds"))
+        .await
+        .unwrap();
+    // Axum 0.7 nest_service + ServeDir serves index.html for bare /kds (200);
+    // no redirect is issued.
+    assert_eq!(resp.status(), StatusCode::OK);
+}
 
 #[tokio::test]
 async fn kds_root_returns_200() {
