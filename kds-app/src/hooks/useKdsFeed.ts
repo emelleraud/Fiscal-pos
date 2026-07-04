@@ -42,6 +42,17 @@ function applyOrderAcked(prev: OrderMap, ack: KdsAckPayload): OrderMap {
 }
 
 /**
+ * Démarre un interval qui signale la présence de l'écran au edge-api toutes les 10 s.
+ * Retourne une fonction d'arrêt à appeler au unmount (clearInterval).
+ */
+export function startHeartbeat(stationId: string, baseUrl: string): () => void {
+  const id = setInterval(() => {
+    fetch(`${baseUrl}/api/v1/kds/heartbeat/${stationId}`, { method: 'POST' }).catch(() => {})
+  }, 10_000)
+  return () => clearInterval(id)
+}
+
+/**
  * Ouvre un flux SSE vers `/api/v1/kds/feed/:stationId`.
  * Reconnexion automatique avec backoff exponentiel (1 s → 30 s max).
  * Bandeau rouge si déconnecté > 3 s (via `connected = false`).
@@ -93,9 +104,11 @@ export function useKdsFeed(stationId: string): { orders: TrackedOrder[]; connect
 
   useEffect(() => {
     connect()
+    const stopHeartbeat = startHeartbeat(stationIdRef.current, BASE)
     return () => {
       esRef.current?.close()
       if (retryTimer.current !== null) clearTimeout(retryTimer.current)
+      stopHeartbeat()
     }
   }, [connect, stationId])
 
