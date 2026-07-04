@@ -52,6 +52,7 @@ export default function KdsChannelTriggers() {
   const load = () => {
     if (!activeSiteId) { setLoading(false); return }
     setLoading(true)
+    setEdited({})
     supabase
       .from('kds_channel_triggers')
       .select('channel,order_type,trigger_on,orb_type')
@@ -189,25 +190,27 @@ export default function KdsChannelTriggers() {
                   <option value="livreur">livreur</option>
                 </select>
               </td>
-              <td style={{ padding: '0.6rem 0.8rem', display: 'flex', gap: 8, alignItems: 'center' }}>
-                {canWrite && isDirty(t) && (
-                  <button
-                    onClick={() => handleSave(rowKey(t))}
-                    disabled={saving === rowKey(t)}
-                    style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 4, padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem' }}
-                  >
-                    {saving === rowKey(t) ? '…' : 'Enregistrer'}
-                  </button>
-                )}
-                {canWrite && (
-                  <button
-                    onClick={() => handleDelete(t)}
-                    disabled={deleting === rowKey(t)}
-                    style={{ background: 'none', border: 'none', color: '#e53e3e', cursor: 'pointer', fontSize: '0.85rem', padding: 0 }}
-                  >
-                    {deleting === rowKey(t) ? '…' : 'Supprimer'}
-                  </button>
-                )}
+              <td style={{ padding: '0.6rem 0.8rem' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {canWrite && isDirty(t) && (
+                    <button
+                      onClick={() => handleSave(rowKey(t))}
+                      disabled={saving === rowKey(t)}
+                      style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 4, padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem' }}
+                    >
+                      {saving === rowKey(t) ? '…' : 'Enregistrer'}
+                    </button>
+                  )}
+                  {canWrite && (
+                    <button
+                      onClick={() => handleDelete(t)}
+                      disabled={deleting === rowKey(t)}
+                      style={{ background: 'none', border: 'none', color: '#e53e3e', cursor: 'pointer', fontSize: '0.85rem', padding: 0 }}
+                    >
+                      {deleting === rowKey(t) ? '…' : 'Supprimer'}
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
