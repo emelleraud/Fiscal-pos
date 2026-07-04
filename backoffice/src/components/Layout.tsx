@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { to: '/kitchen/stations',   label: '📺 Stations KDS' },
   { to: '/kitchen/routing',    label: '🔀 Règles routage' },
   { to: '/kitchen/thresholds', label: '⏱ Seuils timer' },
+  { to: '/kitchen/triggers',   label: '🎯 Déclencheurs canal' },
 ]
 
 export default function Layout() {

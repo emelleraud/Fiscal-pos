@@ -30,6 +30,7 @@ import KdsStations from './pages/kitchen/KdsStations'
 import KdsStationForm from './pages/kitchen/KdsStationForm'
 import KdsRoutingRules from './pages/kitchen/KdsRoutingRules'
 import KdsTimerThresholds from './pages/kitchen/KdsTimerThresholds'
+import KdsChannelTriggers from './pages/kitchen/KdsChannelTriggers'
 
 export default function App() {
   return (
@@ -66,6 +67,7 @@ export default function App() {
                   <Route path="/kitchen/stations/:id"      element={<KdsStationForm />} />
                   <Route path="/kitchen/routing"           element={<KdsRoutingRules />} />
                   <Route path="/kitchen/thresholds"        element={<KdsTimerThresholds />} />
+                  <Route path="/kitchen/triggers"          element={<KdsChannelTriggers />} />
 
                   <Route element={<AdminRoute />}>
                     <Route path="/admin/sites"            element={<SiteList />} />
