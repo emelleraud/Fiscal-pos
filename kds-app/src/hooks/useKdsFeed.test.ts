@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { startHeartbeat } from './useKdsFeed'
 
-const mockFetch = vi.fn().mockResolvedValue({})
+const mockFetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
 vi.stubGlobal('fetch', mockFetch)
 
 describe('startHeartbeat', () => {
