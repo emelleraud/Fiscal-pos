@@ -29,6 +29,9 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
   click_and_collect: 'Click & Collect',
 }
 
+const CHANNELS = ['caisse', 'kiosk', 'drive', 'delivery']
+const ORDER_TYPES = ['eat_in', 'takeaway', 'drive', 'delivery', 'click_and_collect']
+
 export default function KdsChannelTriggers() {
   const [triggers, setTriggers] = useState<ChannelTrigger[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +39,11 @@ export default function KdsChannelTriggers() {
   const [edited, setEdited] = useState<Record<TriggerKey, ChannelTrigger>>({})
   const [saving, setSaving] = useState<TriggerKey | null>(null)
   const [deleting, setDeleting] = useState<TriggerKey | null>(null)
+  const [newChannel, setNewChannel] = useState('')
+  const [newOrderType, setNewOrderType] = useState('')
+  const [newTriggerOn, setNewTriggerOn] = useState<'order' | 'payment' | 'both'>('order')
+  const [newOrbType, setNewOrbType] = useState<'' | 'client' | 'livreur'>('')
+  const [adding, setAdding] = useState(false)
 
   const { activeSiteId } = useSite()
   const { role } = useAuth()
@@ -104,6 +112,34 @@ export default function KdsChannelTriggers() {
     else load()
     setDeleting(null)
   }
+
+  const handleAdd = async () => {
+    if (!activeSiteId || !newChannel || !newOrderType) return
+    setAdding(true); setError(null)
+    const { error: e } = await supabase.from('kds_channel_triggers').insert({
+      site_id: activeSiteId,
+      channel: newChannel,
+      order_type: newOrderType,
+      trigger_on: newTriggerOn,
+      orb_type: newOrbType || null,
+    })
+    if (e) setError(e.message)
+    else {
+      setNewChannel(''); setNewOrderType(''); setNewTriggerOn('order'); setNewOrbType('')
+      load()
+    }
+    setAdding(false)
+  }
+
+  const takenKeys = new Set(triggers.map(rowKey))
+
+  const availableChannels = CHANNELS.filter(ch =>
+    ORDER_TYPES.some(ot => !takenKeys.has(`${ch}:${ot}`))
+  )
+
+  const availableOrderTypes = newChannel
+    ? ORDER_TYPES.filter(ot => !takenKeys.has(`${newChannel}:${ot}`))
+    : []
 
   if (!activeSiteId) return <p style={{ padding: '1.5rem', color: '#888' }}>Sélectionner un site</p>
   if (loading) return <p style={{ padding: '1.5rem', color: '#888' }}>Chargement…</p>
@@ -184,6 +220,72 @@ export default function KdsChannelTriggers() {
           )}
         </tbody>
       </table>
+
+      {canWrite && availableChannels.length > 0 && (
+        <div style={{ background: '#f9f9fb', border: '1px solid #eee', borderRadius: 8, padding: '1rem' }}>
+          <h4 style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem' }}>+ Ajouter un déclencheur</h4>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#666', marginBottom: 3 }}>Canal</label>
+              <select
+                value={newChannel}
+                onChange={e => { setNewChannel(e.target.value); setNewOrderType('') }}
+                style={{ padding: '0.35rem 0.6rem', border: '1px solid #ddd', borderRadius: 4, fontSize: '0.85rem' }}
+              >
+                <option value="">— Choisir —</option>
+                {availableChannels.map(ch => (
+                  <option key={ch} value={ch}>{CHANNEL_LABEL[ch] ?? ch}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#666', marginBottom: 3 }}>Type commande</label>
+              <select
+                value={newOrderType}
+                onChange={e => setNewOrderType(e.target.value)}
+                disabled={!newChannel}
+                style={{ padding: '0.35rem 0.6rem', border: '1px solid #ddd', borderRadius: 4, fontSize: '0.85rem' }}
+              >
+                <option value="">— Choisir —</option>
+                {availableOrderTypes.map(ot => (
+                  <option key={ot} value={ot}>{ORDER_TYPE_LABEL[ot] ?? ot}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#666', marginBottom: 3 }}>Déclenche sur</label>
+              <select
+                value={newTriggerOn}
+                onChange={e => setNewTriggerOn(e.target.value as 'order' | 'payment' | 'both')}
+                style={{ padding: '0.35rem 0.6rem', border: '1px solid #ddd', borderRadius: 4, fontSize: '0.85rem' }}
+              >
+                <option value="order">Commande</option>
+                <option value="payment">Paiement</option>
+                <option value="both">Les deux</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#666', marginBottom: 3 }}>ORB</label>
+              <select
+                value={newOrbType}
+                onChange={e => setNewOrbType(e.target.value as '' | 'client' | 'livreur')}
+                style={{ padding: '0.35rem 0.6rem', border: '1px solid #ddd', borderRadius: 4, fontSize: '0.85rem' }}
+              >
+                <option value="">—</option>
+                <option value="client">client</option>
+                <option value="livreur">livreur</option>
+              </select>
+            </div>
+            <button
+              onClick={handleAdd}
+              disabled={adding || !newChannel || !newOrderType}
+              style={{ background: '#4f8ef7', color: '#fff', border: 'none', borderRadius: 6, padding: '0.45rem 0.9rem', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {adding ? '…' : 'Ajouter'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
