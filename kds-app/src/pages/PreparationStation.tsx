@@ -30,7 +30,9 @@ export default function PreparationStation({ stationId }: Props) {
   const role: StationRole = station?.role ?? 'preparation'
   const stationName = station?.name ?? stationId
 
-  const visibleOrders = orders.filter((o) => o.status !== 'served')
+  const visibleOrders = orders.filter(
+    (o) => o.status !== 'served' && !o.lines.every((l) => l.acknowledged),
+  )
 
   return (
     <div className={`min-h-screen bg-gray-900 text-white flex flex-col ${isFullscreen ? '' : 'p-4'}`}>
