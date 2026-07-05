@@ -156,6 +156,29 @@ pub async fn dispatch_order(
         }
     }
 
+    // Phase 4 — assembly et expo reçoivent la commande complète (toutes les lignes)
+    let all_lines: Vec<&IncomingLine> = order.lines.iter().collect();
+    for station in &stations {
+        if !matches!(station.role, StationRole::Assembly | StationRole::Expo) {
+            continue;
+        }
+        insert_kds_order(pool, order, station, &order_number_short, now_ms).await?;
+        for line in &all_lines {
+            insert_kds_line(pool, order, station, line).await?;
+        }
+        let thresholds = load_thresholds(pool, &station.id).await?;
+        let payload = build_payload(
+            order,
+            station,
+            &all_lines,
+            &order_number_short,
+            now_ms,
+            thresholds,
+            &stations,
+        );
+        broadcaster.send(KdsEvent::OrderNew(payload));
+    }
+
     Ok(())
 }
 
@@ -272,6 +295,7 @@ fn build_payload(
 ) -> KdsOrderPayload {
     let station_statuses = all_stations
         .iter()
+        .filter(|s| s.role == StationRole::Preparation)
         .map(|s| (s.name.clone(), StationStatus::New))
         .collect();
 
