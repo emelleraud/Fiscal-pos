@@ -1,7 +1,7 @@
 export type OrderType = 'eat_in' | 'takeaway' | 'click_and_collect' | 'delivery' | 'drive'
 export type StationStatus = 'new' | 'in_progress' | 'ready' | 'held' | 'assembled' | 'served'
 export type LineType = 'item' | 'combo_component' | 'modifier' | 'comment'
-export type StationRole = 'preparation' | 'holding' | 'assembly' | 'ready_board'
+export type StationRole = 'preparation' | 'holding' | 'assembly' | 'ready_board' | 'expo'
 
 export interface TimerThresholds {
   warning_secs: number

@@ -12,6 +12,8 @@ pub enum StationRole {
     Assembly,
     /// Tableau d'affichage des commandes prêtes (client-facing).
     ReadyBoard,
+    /// Poste d'expédition — 1er bump → ORB PRÊT, 2e bump → SERVI.
+    Expo,
 }
 
 /// Canal de sortie d'une station.
@@ -181,5 +183,17 @@ mod tests {
             serde_json::to_string(&OutputType::Both).unwrap(),
             r#""both""#
         );
+    }
+
+    #[test]
+    fn expo_role_serialization() {
+        let json = serde_json::to_string(&StationRole::Expo).unwrap();
+        assert_eq!(json, r#""expo""#);
+    }
+
+    #[test]
+    fn expo_role_deserialization() {
+        let role: StationRole = serde_json::from_str(r#""expo""#).unwrap();
+        assert_eq!(role, StationRole::Expo);
     }
 }
