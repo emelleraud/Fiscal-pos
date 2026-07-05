@@ -695,14 +695,20 @@ pub async fn pay_order_handler(
     }
 
     // Charger les lignes KDS en attente puis les supprimer (best-effort).
-    let pending_rows = sqlx::query(
+    let pending_rows = match sqlx::query(
         "SELECT line_id, label, product_id, category, quantity \
          FROM order_pending_lines WHERE order_id = ?",
     )
     .bind(&order_id)
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default();
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!(order_id = %order_id, error = %e, "KDS pending lines non chargées");
+            vec![]
+        }
+    };
 
     let kds_lines: Vec<kds_engine::state_machine::IncomingLine> = pending_rows
         .iter()
