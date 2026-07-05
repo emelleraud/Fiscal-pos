@@ -652,3 +652,65 @@ async fn kds_spa_fallback_returns_index() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+#[serial]
+async fn create_order_with_kds_label_stores_pending_lines() {
+    let (app, _db) = setup().await;
+
+    // Ouvrir une session
+    let res = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/sessions/open",
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Créer une commande avec label+category
+    let res = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/orders",
+            json!({
+                "order_reference": "ORD-KDS-001",
+                "line_items": [
+                    {
+                        "amount_ttc_cents": 880,
+                        "tva_rate": "10",
+                        "label": "Burger Classic",
+                        "category": "food",
+                        "quantity": 1
+                    },
+                    {
+                        "amount_ttc_cents": 220,
+                        "tva_rate": "10",
+                        "label": "Coca-Cola",
+                        "category": "drink",
+                        "quantity": 1
+                    }
+                ],
+                "payment_method": "card"
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let body = body_json(res).await;
+    let order_id = body["order_id"].as_str().unwrap().to_string();
+
+    // Payer — doit réussir même si aucune station KDS n'est configurée (dispatch best-effort)
+    let res = app
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/orders/{order_id}/pay"),
+            json!({ "payment_method": "card", "amount_paid_cents": 1100 }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}

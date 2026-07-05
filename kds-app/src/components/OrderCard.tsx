@@ -14,6 +14,7 @@ const STAGE_BADGE: Record<string, string> = {
   preparation: 'PREP',
   holding: 'HOLD',
   assembly: 'ASSE',
+  expo: 'EXPO',
 }
 
 function LineRow({
@@ -135,7 +136,7 @@ export default function OrderCard({ order, stationId, role }: Props) {
       </div>
 
       {/* Station statuses (vue assemblage) */}
-      {role === 'assembly' && Object.keys(order.station_statuses).length > 0 && (
+      {(role === 'assembly' || role === 'expo') && Object.keys(order.station_statuses).length > 0 && (
         <div className="px-3 py-1 border-t border-gray-700 space-y-0.5">
           {Object.entries(order.station_statuses).map(([name, status]) => (
             <div key={name} className="flex justify-between text-xs text-gray-300">
@@ -152,7 +153,7 @@ export default function OrderCard({ order, stationId, role }: Props) {
       <div className="px-3 py-2 border-t border-gray-700 flex items-center justify-between">
         <span className="text-xs text-gray-400">{totalArticles} article{totalArticles > 1 ? 's' : ''}</span>
         <div className="flex gap-2">
-          {role === 'assembly' ? (
+          {(role === 'assembly' || role === 'expo') ? (
             <>
               {!allAcked && (
                 <button
@@ -160,7 +161,7 @@ export default function OrderCard({ order, stationId, role }: Props) {
                   disabled={bumping}
                   className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded disabled:opacity-50"
                 >
-                  PRÊT →
+                  {role === 'expo' ? 'EXPO PRÊT →' : 'PRÊT →'}
                 </button>
               )}
               {allAcked && (
@@ -169,7 +170,7 @@ export default function OrderCard({ order, stationId, role }: Props) {
                   disabled={bumping}
                   className="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded disabled:opacity-50"
                 >
-                  SERVI ✓
+                  {role === 'expo' ? 'LIVRÉ ✓' : 'SERVI ✓'}
                 </button>
               )}
             </>

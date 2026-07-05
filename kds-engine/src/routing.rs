@@ -28,6 +28,48 @@ pub async fn set_active_profile(pool: &SqlitePool, profile_id: &str) -> Result<(
     Ok(())
 }
 
+/// Charge une station par son identifiant.
+///
+/// # Errors
+/// Retourne `KdsError::Database` si la requête échoue.
+pub async fn load_station(
+    pool: &SqlitePool,
+    station_id: &str,
+) -> Result<Option<Station>, KdsError> {
+    let row = sqlx::query_as::<_, StationRow>(
+        r"SELECT id, name, role, temperature_group, output_type,
+                  printer_address, printer_type, printer_mode, paper_width_mm,
+                  fallback_station_id, active_in_profiles, sort_order, enabled
+           FROM kds_stations WHERE id = ?",
+    )
+    .bind(station_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.and_then(|r| {
+        let profiles: Vec<String> = serde_json::from_str(&r.active_in_profiles).ok()?;
+        Some(Station {
+            id: r.id,
+            name: r.name,
+            role: serde_json::from_str(&format!("\"{}\"", r.role)).ok()?,
+            temperature_group: r.temperature_group,
+            output_type: serde_json::from_str(&format!("\"{}\"", r.output_type)).ok()?,
+            printer_address: r.printer_address,
+            printer_type: r
+                .printer_type
+                .and_then(|t| serde_json::from_str(&format!("\"{t}\"")).ok()),
+            printer_mode: r
+                .printer_mode
+                .and_then(|m| serde_json::from_str(&format!("\"{m}\"")).ok()),
+            paper_width_mm: r.paper_width_mm,
+            fallback_station_id: r.fallback_station_id,
+            active_in_profiles: profiles,
+            sort_order: r.sort_order,
+            enabled: r.enabled != 0,
+        })
+    }))
+}
+
 /// Charge toutes les stations activées pour le profil donné.
 ///
 /// # Errors

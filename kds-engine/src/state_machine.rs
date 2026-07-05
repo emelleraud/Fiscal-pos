@@ -9,7 +9,7 @@ use crate::{
     printer::PrintLine,
     routing,
     types::{
-        event::{KdsAckPayload, KdsEvent, KdsLine, KdsOrderPayload, LineType, TimerThresholds},
+        event::{KdsEvent, KdsLine, KdsOrderPayload, LineType, TimerThresholds},
         order_type::OrderType,
         station::{Station, StationRole, StationStatus},
     },
@@ -156,6 +156,29 @@ pub async fn dispatch_order(
         }
     }
 
+    // Phase 4 — assembly et expo reçoivent la commande complète (toutes les lignes)
+    let all_lines: Vec<&IncomingLine> = order.lines.iter().collect();
+    for station in &stations {
+        if !matches!(station.role, StationRole::Assembly | StationRole::Expo) {
+            continue;
+        }
+        insert_kds_order(pool, order, station, &order_number_short, now_ms).await?;
+        for line in &all_lines {
+            insert_kds_line(pool, order, station, line).await?;
+        }
+        let thresholds = load_thresholds(pool, &station.id).await?;
+        let payload = build_payload(
+            order,
+            station,
+            &all_lines,
+            &order_number_short,
+            now_ms,
+            thresholds,
+            &stations,
+        );
+        broadcaster.send(KdsEvent::OrderNew(payload));
+    }
+
     Ok(())
 }
 
@@ -272,6 +295,7 @@ fn build_payload(
 ) -> KdsOrderPayload {
     let station_statuses = all_stations
         .iter()
+        .filter(|s| s.role == StationRole::Preparation)
         .map(|s| (s.name.clone(), StationStatus::New))
         .collect();
 
@@ -328,9 +352,14 @@ impl From<&IncomingLine> for PrintLine {
 }
 
 /// Acknowledge un bon entier ou une ligne pour une station donnée.
+/// Comportement selon le rôle :
+/// - Préparation + ligne individuelle → impression ticket produit si imprimante configurée
+/// - Préparation + toutes lignes ackées → `OrderUpdated` (`in_progress/preparation`)
+/// - Assembly + toutes lignes ackées → impression ticket complet + `OrderUpdated` (`in_progress/assembly`)
+/// - Expo + toutes lignes ackées → `OrderUpdated` (`ready/expo`) → ORB passe en colonne PRÊT
 ///
 /// # Errors
-/// Retourne `KdsError::Database` si la mise à jour échoue.
+/// Retourne `KdsError::Database` si une mise à jour échoue.
 pub async fn acknowledge(
     pool: &SqlitePool,
     broadcaster: &KdsBroadcaster,
@@ -340,28 +369,128 @@ pub async fn acknowledge(
 ) -> Result<(), KdsError> {
     let now_ms = now_ms();
 
-    if let Some(lid) = line_id {
-        sqlx::query(
-            "UPDATE kds_order_lines SET acknowledged = 1, acknowledged_at = ? WHERE order_id = ? AND line_id = ? AND station_id = ?"
-        )
-        .bind(now_ms)
-        .bind(order_id)
-        .bind(lid)
-        .bind(station_id)
-        .execute(pool)
-        .await?;
-    } else {
-        sqlx::query(
-            "UPDATE kds_order_lines SET acknowledged = 1, acknowledged_at = ? WHERE order_id = ? AND station_id = ?"
-        )
-        .bind(now_ms)
-        .bind(order_id)
-        .bind(station_id)
-        .execute(pool)
-        .await?;
+    // Charger la station pour connaître son rôle et sa config imprimante
+    let station = routing::load_station(pool, station_id).await?;
 
+    if let Some(lid) = line_id {
+        ack_single_line(pool, station.as_ref(), order_id, station_id, lid, now_ms).await?;
+    } else {
+        ack_all_lines(pool, order_id, station_id, now_ms).await?;
+    }
+
+    // Vérifier si toutes les lignes sont maintenant ackées
+    let acked = all_lines_acked(pool, order_id, station_id).await?;
+    if acked {
+        handle_all_acked(pool, broadcaster, station.as_ref(), order_id, station_id, line_id.is_some(), now_ms).await?;
+    }
+
+    // Toujours émettre OrderAcked (mise à jour des lignes dans le frontend)
+    broadcaster.send(KdsEvent::OrderAcked(
+        crate::types::event::KdsAckPayload {
+            order_id: order_id.to_string(),
+            station_id: station_id.to_string(),
+            line_id: line_id.map(str::to_string),
+        },
+    ));
+
+    Ok(())
+}
+
+/// Acquitte une ligne individuelle et imprime le ticket produit si la station est en préparation.
+async fn ack_single_line(
+    pool: &SqlitePool,
+    station: Option<&Station>,
+    order_id: &str,
+    station_id: &str,
+    lid: &str,
+    now_ms: i64,
+) -> Result<(), KdsError> {
+    sqlx::query(
+        "UPDATE kds_order_lines SET acknowledged = 1, acknowledged_at = ?
+         WHERE order_id = ? AND line_id = ? AND station_id = ?",
+    )
+    .bind(now_ms)
+    .bind(order_id)
+    .bind(lid)
+    .bind(station_id)
+    .execute(pool)
+    .await?;
+
+    // Impression ticket produit individuel (mode "avec KDS" sur station préparation)
+    if let Some(s) = station {
+        if s.role == StationRole::Preparation {
+            if let Some(ref addr) = s.printer_address {
+                let row: Option<(String, i64, Option<String>)> = sqlx::query_as(
+                    "SELECT product_name, quantity, comment FROM kds_order_lines
+                     WHERE order_id = ? AND line_id = ? AND station_id = ?",
+                )
+                .bind(order_id)
+                .bind(lid)
+                .bind(station_id)
+                .fetch_optional(pool)
+                .await?;
+
+                if let Some((product_name, quantity, comment)) = row {
+                    if let Ok(short) = load_order_short(pool, order_id, station_id).await {
+                        tokio::spawn(crate::printer::print_order(
+                            s.clone(),
+                            addr.clone(),
+                            order_id.to_string(),
+                            short,
+                            vec![PrintLine { product_name, quantity, indent: 0, comment }],
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Acquitte toutes les lignes d'une station (bump en-tête).
+async fn ack_all_lines(
+    pool: &SqlitePool,
+    order_id: &str,
+    station_id: &str,
+    now_ms: i64,
+) -> Result<(), KdsError> {
+    sqlx::query(
+        "UPDATE kds_order_lines SET acknowledged = 1, acknowledged_at = ?
+         WHERE order_id = ? AND station_id = ?",
+    )
+    .bind(now_ms)
+    .bind(order_id)
+    .bind(station_id)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "UPDATE kds_orders SET status = 'ready', first_bump_at = COALESCE(first_bump_at, ?)
+         WHERE order_id = ? AND station_id = ?",
+    )
+    .bind(now_ms)
+    .bind(order_id)
+    .bind(station_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Gère le broadcast `OrderUpdated` après que toutes les lignes d'une station sont ackées.
+async fn handle_all_acked(
+    pool: &SqlitePool,
+    broadcaster: &KdsBroadcaster,
+    station: Option<&Station>,
+    order_id: &str,
+    station_id: &str,
+    via_line: bool,
+    now_ms: i64,
+) -> Result<(), KdsError> {
+    // Mettre à jour kds_orders si on est passé par la voie ligne individuelle
+    if via_line {
         sqlx::query(
-            "UPDATE kds_orders SET status = 'ready', first_bump_at = COALESCE(first_bump_at, ?) WHERE order_id = ? AND station_id = ?"
+            "UPDATE kds_orders SET status = 'ready', first_bump_at = COALESCE(first_bump_at, ?)
+             WHERE order_id = ? AND station_id = ?",
         )
         .bind(now_ms)
         .bind(order_id)
@@ -370,12 +499,50 @@ pub async fn acknowledge(
         .await?;
     }
 
-    broadcaster.send(KdsEvent::OrderAcked(KdsAckPayload {
-        order_id: order_id.to_string(),
-        station_id: station_id.to_string(),
-        line_id: line_id.map(str::to_string),
-    }));
-
+    match station.map(|s| &s.role) {
+        Some(StationRole::Preparation) => {
+            let station_statuses = load_prep_station_statuses(pool, order_id).await?;
+            broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
+                order_id: order_id.to_string(),
+                status: "in_progress".to_string(),
+                stage: "preparation".to_string(),
+                station_statuses,
+            }));
+        }
+        Some(StationRole::Assembly) => {
+            if let Some(addr) = station.and_then(|s| s.printer_address.as_ref()) {
+                let lines = load_print_lines(pool, order_id, station_id).await?;
+                if let Ok(short) = load_order_short(pool, order_id, station_id).await {
+                    if let Some(s) = station {
+                        tokio::spawn(crate::printer::print_order(
+                            s.clone(),
+                            addr.clone(),
+                            order_id.to_string(),
+                            short,
+                            lines,
+                        ));
+                    }
+                }
+            }
+            let station_statuses = load_prep_station_statuses(pool, order_id).await?;
+            broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
+                order_id: order_id.to_string(),
+                status: "in_progress".to_string(),
+                stage: "assembly".to_string(),
+                station_statuses,
+            }));
+        }
+        Some(StationRole::Expo) => {
+            let station_statuses = load_prep_station_statuses(pool, order_id).await?;
+            broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
+                order_id: order_id.to_string(),
+                status: "ready".to_string(),
+                stage: "expo".to_string(),
+                station_statuses,
+            }));
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -409,6 +576,98 @@ pub async fn mark_served(
     ));
 
     Ok(())
+}
+
+/// Vérifie si toutes les lignes d'une commande sont acquittées pour une station.
+async fn all_lines_acked(
+    pool: &SqlitePool,
+    order_id: &str,
+    station_id: &str,
+) -> Result<bool, KdsError> {
+    let (total, unacked): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COALESCE(SUM(CASE WHEN acknowledged = 0 THEN 1 ELSE 0 END), 0)
+         FROM kds_order_lines WHERE order_id = ? AND station_id = ?",
+    )
+    .bind(order_id)
+    .bind(station_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(total > 0 && unacked == 0)
+}
+
+/// Charge les statuts des stations de préparation impliquées dans une commande.
+/// Utilisé pour mettre à jour les badges sur les écrans assembly et expo.
+async fn load_prep_station_statuses(
+    pool: &SqlitePool,
+    order_id: &str,
+) -> Result<HashMap<String, StationStatus>, KdsError> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        r"SELECT s.name,
+                 CASE WHEN SUM(CASE WHEN l.acknowledged = 0 THEN 1 ELSE 0 END) = 0
+                      THEN 'ready' ELSE 'new' END AS st
+          FROM kds_stations s
+          INNER JOIN kds_order_lines l ON l.station_id = s.id AND l.order_id = ?
+          WHERE s.role = 'preparation'
+          GROUP BY s.id, s.name",
+    )
+    .bind(order_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(name, st)| {
+            let status = if st == "ready" {
+                StationStatus::Ready
+            } else {
+                StationStatus::New
+            };
+            (name, status)
+        })
+        .collect())
+}
+
+/// Charge le numéro court d'une commande pour l'en-tête du ticket.
+/// Retourne une chaîne vide si la commande n'existe pas (ne bloque pas l'impression).
+async fn load_order_short(
+    pool: &SqlitePool,
+    order_id: &str,
+    station_id: &str,
+) -> Result<String, KdsError> {
+    Ok(sqlx::query_scalar(
+        "SELECT order_number_short FROM kds_orders WHERE order_id = ? AND station_id = ?",
+    )
+    .bind(order_id)
+    .bind(station_id)
+    .fetch_optional(pool)
+    .await?
+    .unwrap_or_default())
+}
+
+/// Charge les lignes d'une commande pour impression (station assembly).
+async fn load_print_lines(
+    pool: &SqlitePool,
+    order_id: &str,
+    station_id: &str,
+) -> Result<Vec<PrintLine>, KdsError> {
+    let rows: Vec<(String, i64, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT product_name, quantity, parent_line_id, comment
+         FROM kds_order_lines WHERE order_id = ? AND station_id = ? ORDER BY rowid",
+    )
+    .bind(order_id)
+    .bind(station_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(product_name, quantity, parent_line_id, comment)| PrintLine {
+            product_name,
+            quantity,
+            indent: usize::from(parent_line_id.is_some()),
+            comment,
+        })
+        .collect())
 }
 
 #[cfg(test)]

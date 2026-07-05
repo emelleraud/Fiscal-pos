@@ -60,6 +60,16 @@ pub struct LineItem {
     pub amount_ttc_cents: i64,
     /// Taux de TVA applicable à cet article.
     pub tva_rate: TvaRateRequest,
+    /// Libellé affiché sur l'écran KDS (optionnel — ignoré si absent).
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Quantité de l'article (pour l'affichage KDS).
+    #[serde(default)]
+    pub quantity: Option<i64>,
+    /// Catégorie de l'article — utilisée par les règles de routage KDS.
+    /// Exemples : "food", "drink", "dessert".
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 /// Corps de la requête de création de commande.
@@ -608,6 +618,27 @@ pub async fn create_order_handler(
         });
     }
 
+    // Stocker les lignes KDS en attente de dispatch (sera lu par POST /pay).
+    // Best-effort : une erreur ici ne bloque pas la vente.
+    for (i, li) in body.line_items.iter().enumerate() {
+        if li.label.is_none() {
+            continue; // Ignorer les lignes sans libellé KDS
+        }
+        let _ = sqlx::query(
+            "INSERT OR IGNORE INTO order_pending_lines \
+             (order_id, line_id, label, product_id, category, quantity) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&order_id)
+        .bind(format!("line-{i}"))
+        .bind(li.label.as_deref().unwrap_or(""))
+        .bind(li.sku.as_deref().unwrap_or(""))
+        .bind(li.category.as_deref().unwrap_or(""))
+        .bind(li.quantity.unwrap_or(1))
+        .execute(&state.db)
+        .await;
+    }
+
     Ok((
         StatusCode::CREATED,
         Json(OrderResponse {
@@ -663,23 +694,53 @@ pub async fn pay_order_handler(
         .into());
     }
 
-    // Hook KDS — router la commande vers les stations cuisine.
-    //
-    // Dans ce MVP, les line_items ne sont pas stockés dans une table dédiée :
-    // ils ont été agrégés au moment de POST /orders. On dispatche donc avec une
-    // liste de lignes vide. Le routeur KDS ignorera silencieusement les commandes
-    // sans lignes ; la structure est en place pour être enrichie quand une table
-    // order_lines sera ajoutée au schéma.
-    //
-    // order_type : non porté par PayOrderRequest — utilise la valeur par défaut
-    // (EatIn) en attendant qu'il soit stocké lors de la création de la commande.
+    // Charger les lignes KDS en attente puis les supprimer (best-effort).
+    let pending_rows = match sqlx::query(
+        "SELECT line_id, label, product_id, category, quantity \
+         FROM order_pending_lines WHERE order_id = ?",
+    )
+    .bind(&order_id)
+    .fetch_all(&state.db)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!(order_id = %order_id, error = %e, "KDS pending lines non chargées");
+            vec![]
+        }
+    };
+
+    let kds_lines: Vec<kds_engine::state_machine::IncomingLine> = pending_rows
+        .iter()
+        .map(|row| {
+            use sqlx::Row as _;
+            kds_engine::state_machine::IncomingLine {
+                line_id:        row.try_get("line_id").unwrap_or_default(),
+                product_name:   row.try_get("label").unwrap_or_default(),
+                quantity:       row.try_get("quantity").unwrap_or(1),
+                category:       row.try_get("category").unwrap_or_default(),
+                product_id:     row.try_get("product_id").unwrap_or_default(),
+                tags:           vec![],
+                parent_line_id: None,
+                line_type:      kds_engine::types::event::LineType::Item,
+                comment:        None,
+            }
+        })
+        .collect();
+
+    // Nettoyer les lignes en attente — best-effort
+    let _ = sqlx::query("DELETE FROM order_pending_lines WHERE order_id = ?")
+        .bind(&order_id)
+        .execute(&state.db)
+        .await;
+
     let incoming = IncomingOrder {
         order_id: order_id.clone(),
         channel: "caisse".to_string(),
         order_type: common::OrderType::default(),
         customer_name: None,
         external_order_id: None,
-        lines: vec![],
+        lines: kds_lines,
     };
 
     // Dispatch asynchrone — ne bloque pas la réponse HTTP.
