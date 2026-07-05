@@ -584,14 +584,15 @@ async fn all_lines_acked(
     order_id: &str,
     station_id: &str,
 ) -> Result<bool, KdsError> {
-    let unacked: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM kds_order_lines WHERE order_id = ? AND station_id = ? AND acknowledged = 0",
+    let (total, unacked): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COALESCE(SUM(CASE WHEN acknowledged = 0 THEN 1 ELSE 0 END), 0)
+         FROM kds_order_lines WHERE order_id = ? AND station_id = ?",
     )
     .bind(order_id)
     .bind(station_id)
     .fetch_one(pool)
     .await?;
-    Ok(unacked == 0)
+    Ok(total > 0 && unacked == 0)
 }
 
 /// Charge les statuts des stations de préparation impliquées dans une commande.
