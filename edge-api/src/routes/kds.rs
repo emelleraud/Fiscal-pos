@@ -200,13 +200,24 @@ pub async fn kds_set_config(
 // Stations — GET /api/v1/kds/stations
 // ---------------------------------------------------------------------------
 
-/// Retourne la liste des stations actives pour le profil courant.
+/// Station enrichie avec son état de connexion temps réel.
+#[derive(Serialize)]
+pub struct StationWithStatus {
+    #[serde(flatten)]
+    pub station: kds_engine::types::station::Station,
+    /// `true` si un heartbeat a été reçu dans le délai configuré,
+    /// ou si la station n'a jamais heartbeaté (safe-default = online au démarrage).
+    pub is_online: bool,
+}
+
+/// Retourne la liste des stations actives pour le profil courant,
+/// enrichies de leur état de connexion (`is_online`).
 ///
 /// # Errors
 /// Returns [`KdsApiErr`] on database errors.
 pub async fn kds_stations(
     State(state): State<AppState>,
-) -> Result<Json<Vec<kds_engine::types::station::Station>>, KdsApiErr> {
+) -> Result<Json<Vec<StationWithStatus>>, KdsApiErr> {
     let profile = routing::active_profile_id(&state.db)
         .await
         .map_err(KdsApiErr::from)?;
@@ -215,7 +226,20 @@ pub async fn kds_stations(
         .await
         .map_err(KdsApiErr::from)?;
 
-    Ok(Json(stations))
+    let timeout_secs = state.kds_heartbeat_timeout_secs;
+    let heartbeats = &state.station_heartbeats;
+
+    let result = stations
+        .into_iter()
+        .map(|station| {
+            let is_online = heartbeats
+                .get(&station.id)
+                .is_none_or(|last_seen| last_seen.elapsed().as_secs() < timeout_secs);
+            StationWithStatus { station, is_online }
+        })
+        .collect();
+
+    Ok(Json(result))
 }
 
 // ---------------------------------------------------------------------------
