@@ -9,7 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  DATABASE_URL: sqlite::memory:
+  DATABASE_URL: "sqlite::memory:"
 
 jobs:
   fmt:
