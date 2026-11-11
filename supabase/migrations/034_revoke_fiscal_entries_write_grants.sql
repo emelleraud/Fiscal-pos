@@ -1,0 +1,32 @@
+-- =============================================================================
+-- 034_revoke_fiscal_entries_write_grants.sql
+--
+-- `authenticated` has UPDATE, DELETE, TRUNCATE, TRIGGER and REFERENCES on
+-- public.fiscal_entries (confirmed via information_schema.table_privileges
+-- against the linked project) -- not from any migration's own GRANT (002
+-- only granted SELECT/INSERT to the literal pos_admin/pos_caissier/
+-- pos_auditeur roles, never to `authenticated`; 023 only added SELECT to
+-- `authenticated`), but the same per-project default privilege already
+-- found and fixed for `anon` in 032, here affecting `authenticated` on
+-- what is supposed to be an append-only NF525 ledger.
+--
+-- Not currently exploitable through RLS: no policy grants UPDATE or
+-- DELETE to `authenticated` for any role at all (confirmed via pg_policy:
+-- every policy on this table is SELECT or INSERT only), and the
+-- fiscal_entries_no_update/fiscal_entries_no_delete BEFORE triggers from
+-- 004_fix_immutability_rules.sql would reject any UPDATE/DELETE outright
+-- regardless. TRUNCATE is the one gap those two triggers can't cover
+-- (TRUNCATE isn't a per-row DELETE, so a BEFORE DELETE trigger never
+-- fires for it) and isn't filtered by RLS either -- it's currently only
+-- unreachable because PostgREST doesn't expose TRUNCATE as a REST verb,
+-- not because anything in the database would stop it.
+--
+-- Revokes UPDATE/DELETE/TRUNCATE/TRIGGER/REFERENCES from `authenticated`
+-- -- none of them match any real, policy-gated use case for this table,
+-- same reasoning as 032. Leaves SELECT and INSERT untouched: both have
+-- real RLS policies and intended callers (pos_caissier/pos_admin inserts,
+-- the various read policies).
+-- =============================================================================
+
+REVOKE UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES
+  ON public.fiscal_entries FROM authenticated;
