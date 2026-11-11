@@ -255,7 +255,7 @@ mod tests {
     fn empty_when_no_match() {
         let rules = vec![rule(RuleType::Category, "Burgers", &["grill"], 0)];
         let result = resolve_stations(&rules, "Desserts", "brownie-001", &[]);
-        assert!(result.is_empty());
+        assert_eq!(result, Vec::<&str>::new());
     }
 
     #[test]

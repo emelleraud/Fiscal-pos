@@ -426,7 +426,7 @@ mod tests {
     fn payload_operation_type_is_uppercase_label() {
         let entry = test_entry();
         let payload = FiscalEntryPayload::from_entry(&entry, "SITE");
-        assert!(!payload.operation_type.is_empty());
+        assert_ne!(payload.operation_type, "");
     }
 
     #[test]
