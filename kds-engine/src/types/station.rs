@@ -17,7 +17,7 @@ pub enum StationRole {
 }
 
 impl StationRole {
-    /// Retourne la valeur TEXT pour SQLite (correspond au CHECK constraint).
+    /// Retourne la valeur TEXT pour `SQLite` (correspond au CHECK constraint).
     #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {

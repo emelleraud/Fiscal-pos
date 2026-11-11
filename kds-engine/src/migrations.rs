@@ -41,12 +41,11 @@ async fn apply_migration(
     sql: &str,
 ) -> Result<(), KdsError> {
     if tracking_exists {
-        let already: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM _applied_migrations WHERE version = ?",
-        )
-        .bind(version)
-        .fetch_one(pool)
-        .await?;
+        let already: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM _applied_migrations WHERE version = ?")
+                .bind(version)
+                .fetch_one(pool)
+                .await?;
         if already > 0 {
             return Ok(());
         }

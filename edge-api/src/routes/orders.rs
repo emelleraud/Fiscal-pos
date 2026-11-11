@@ -715,15 +715,15 @@ pub async fn pay_order_handler(
         .map(|row| {
             use sqlx::Row as _;
             kds_engine::state_machine::IncomingLine {
-                line_id:        row.try_get("line_id").unwrap_or_default(),
-                product_name:   row.try_get("label").unwrap_or_default(),
-                quantity:       row.try_get("quantity").unwrap_or(1),
-                category:       row.try_get("category").unwrap_or_default(),
-                product_id:     row.try_get("product_id").unwrap_or_default(),
-                tags:           vec![],
+                line_id: row.try_get("line_id").unwrap_or_default(),
+                product_name: row.try_get("label").unwrap_or_default(),
+                quantity: row.try_get("quantity").unwrap_or(1),
+                category: row.try_get("category").unwrap_or_default(),
+                product_id: row.try_get("product_id").unwrap_or_default(),
+                tags: vec![],
                 parent_line_id: None,
-                line_type:      kds_engine::types::event::LineType::Item,
-                comment:        None,
+                line_type: kds_engine::types::event::LineType::Item,
+                comment: None,
             }
         })
         .collect();

@@ -381,17 +381,24 @@ pub async fn acknowledge(
     // Vérifier si toutes les lignes sont maintenant ackées
     let acked = all_lines_acked(pool, order_id, station_id).await?;
     if acked {
-        handle_all_acked(pool, broadcaster, station.as_ref(), order_id, station_id, line_id.is_some(), now_ms).await?;
+        handle_all_acked(
+            pool,
+            broadcaster,
+            station.as_ref(),
+            order_id,
+            station_id,
+            line_id.is_some(),
+            now_ms,
+        )
+        .await?;
     }
 
     // Toujours émettre OrderAcked (mise à jour des lignes dans le frontend)
-    broadcaster.send(KdsEvent::OrderAcked(
-        crate::types::event::KdsAckPayload {
-            order_id: order_id.to_string(),
-            station_id: station_id.to_string(),
-            line_id: line_id.map(str::to_string),
-        },
-    ));
+    broadcaster.send(KdsEvent::OrderAcked(crate::types::event::KdsAckPayload {
+        order_id: order_id.to_string(),
+        station_id: station_id.to_string(),
+        line_id: line_id.map(str::to_string),
+    }));
 
     Ok(())
 }
@@ -437,7 +444,12 @@ async fn ack_single_line(
                             addr.clone(),
                             order_id.to_string(),
                             short,
-                            vec![PrintLine { product_name, quantity, indent: 0, comment }],
+                            vec![PrintLine {
+                                product_name,
+                                quantity,
+                                indent: 0,
+                                comment,
+                            }],
                         ));
                     }
                 }
@@ -502,12 +514,14 @@ async fn handle_all_acked(
     match station.map(|s| &s.role) {
         Some(StationRole::Preparation) => {
             let station_statuses = load_prep_station_statuses(pool, order_id).await?;
-            broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
-                order_id: order_id.to_string(),
-                status: "in_progress".to_string(),
-                stage: "preparation".to_string(),
-                station_statuses,
-            }));
+            broadcaster.send(KdsEvent::OrderUpdated(
+                crate::types::event::KdsOrderUpdate {
+                    order_id: order_id.to_string(),
+                    status: "in_progress".to_string(),
+                    stage: "preparation".to_string(),
+                    station_statuses,
+                },
+            ));
         }
         Some(StationRole::Assembly) => {
             if let Some(addr) = station.and_then(|s| s.printer_address.as_ref()) {
@@ -524,24 +538,42 @@ async fn handle_all_acked(
                     }
                 }
             }
-            cascade_clear_upstream(pool, broadcaster, order_id, &[StationRole::Preparation], now_ms).await?;
+            cascade_clear_upstream(
+                pool,
+                broadcaster,
+                order_id,
+                &[StationRole::Preparation],
+                now_ms,
+            )
+            .await?;
             let station_statuses = load_prep_station_statuses(pool, order_id).await?;
-            broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
-                order_id: order_id.to_string(),
-                status: "in_progress".to_string(),
-                stage: "assembly".to_string(),
-                station_statuses,
-            }));
+            broadcaster.send(KdsEvent::OrderUpdated(
+                crate::types::event::KdsOrderUpdate {
+                    order_id: order_id.to_string(),
+                    status: "in_progress".to_string(),
+                    stage: "assembly".to_string(),
+                    station_statuses,
+                },
+            ));
         }
         Some(StationRole::Expo) => {
-            cascade_clear_upstream(pool, broadcaster, order_id, &[StationRole::Preparation, StationRole::Assembly], now_ms).await?;
+            cascade_clear_upstream(
+                pool,
+                broadcaster,
+                order_id,
+                &[StationRole::Preparation, StationRole::Assembly],
+                now_ms,
+            )
+            .await?;
             let station_statuses = load_prep_station_statuses(pool, order_id).await?;
-            broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
-                order_id: order_id.to_string(),
-                status: "ready".to_string(),
-                stage: "expo".to_string(),
-                station_statuses,
-            }));
+            broadcaster.send(KdsEvent::OrderUpdated(
+                crate::types::event::KdsOrderUpdate {
+                    order_id: order_id.to_string(),
+                    status: "ready".to_string(),
+                    stage: "expo".to_string(),
+                    station_statuses,
+                },
+            ));
         }
         _ => {}
     }
@@ -716,12 +748,14 @@ async fn load_print_lines(
 
     Ok(rows
         .into_iter()
-        .map(|(product_name, quantity, parent_line_id, comment)| PrintLine {
-            product_name,
-            quantity,
-            indent: usize::from(parent_line_id.is_some()),
-            comment,
-        })
+        .map(
+            |(product_name, quantity, parent_line_id, comment)| PrintLine {
+                product_name,
+                quantity,
+                indent: usize::from(parent_line_id.is_some()),
+                comment,
+            },
+        )
         .collect())
 }
 
@@ -768,9 +802,7 @@ mod failover_tests {
         let hb: DashMap<String, Instant> = DashMap::new();
         hb.insert(
             "grill".to_string(),
-            Instant::now()
-                .checked_sub(Duration::from_secs(31))
-                .unwrap(),
+            Instant::now().checked_sub(Duration::from_secs(31)).unwrap(),
         );
         assert!(!is_online(&hb, "grill", 30));
     }
@@ -790,9 +822,7 @@ mod failover_tests {
         let hb: DashMap<String, Instant> = DashMap::new();
         hb.insert(
             "grill".to_string(),
-            Instant::now()
-                .checked_sub(Duration::from_secs(31))
-                .unwrap(),
+            Instant::now().checked_sub(Duration::from_secs(31)).unwrap(),
         );
         hb.insert("cold".to_string(), Instant::now());
         let primary = station("grill", Some("cold"));
@@ -806,9 +836,7 @@ mod failover_tests {
         let hb: DashMap<String, Instant> = DashMap::new();
         hb.insert(
             "grill".to_string(),
-            Instant::now()
-                .checked_sub(Duration::from_secs(31))
-                .unwrap(),
+            Instant::now().checked_sub(Duration::from_secs(31)).unwrap(),
         );
         let primary = station("grill", None);
         let all = vec![primary.clone()];
@@ -820,15 +848,11 @@ mod failover_tests {
         let hb: DashMap<String, Instant> = DashMap::new();
         hb.insert(
             "grill".to_string(),
-            Instant::now()
-                .checked_sub(Duration::from_secs(31))
-                .unwrap(),
+            Instant::now().checked_sub(Duration::from_secs(31)).unwrap(),
         );
         hb.insert(
             "cold".to_string(),
-            Instant::now()
-                .checked_sub(Duration::from_secs(31))
-                .unwrap(),
+            Instant::now().checked_sub(Duration::from_secs(31)).unwrap(),
         );
         let primary = station("grill", Some("cold"));
         let all = vec![primary.clone(), station("cold", None)];
@@ -840,9 +864,7 @@ mod failover_tests {
         let hb: DashMap<String, Instant> = DashMap::new();
         hb.insert(
             "grill".to_string(),
-            Instant::now()
-                .checked_sub(Duration::from_secs(31))
-                .unwrap(),
+            Instant::now().checked_sub(Duration::from_secs(31)).unwrap(),
         );
         // "cold" n'est pas dans all_stations (non dans le profil actif)
         let primary = station("grill", Some("cold"));
