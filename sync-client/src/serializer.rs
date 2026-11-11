@@ -69,7 +69,7 @@ fn ms_to_iso8601(ms: u64) -> String {
 ///
 /// Les noms de champs correspondent **exactement** aux colonnes de la table
 /// `public.fiscal_entries` dans `PostgreSQL` (`snake_case`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FiscalEntryPayload {
     /// UUID de l'entrée (string).
     pub id: String,

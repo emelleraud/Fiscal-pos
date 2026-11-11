@@ -285,7 +285,7 @@ mod tests {
             ..base_promo(1)
         };
         let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
-        assert!(r.applied.is_empty());
+        assert_eq!(r.applied, Vec::<PromoApplication>::new());
     }
 
     #[test]
@@ -295,7 +295,7 @@ mod tests {
             ..base_promo(2)
         };
         let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
-        assert!(r.applied.is_empty());
+        assert_eq!(r.applied, Vec::<PromoApplication>::new());
     }
 
     #[test]
@@ -317,7 +317,7 @@ mod tests {
             ..base_promo(4)
         };
         let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-06-01 10:00 UTC));
-        assert!(r.applied.is_empty());
+        assert_eq!(r.applied, Vec::<PromoApplication>::new());
     }
 
     #[test]
@@ -339,7 +339,7 @@ mod tests {
             ..base_promo(6)
         };
         let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 14:00 UTC));
-        assert!(r.applied.is_empty());
+        assert_eq!(r.applied, Vec::<PromoApplication>::new());
     }
 
     #[test]
@@ -360,7 +360,7 @@ mod tests {
             ..base_promo(8)
         };
         let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
-        assert!(r.applied.is_empty());
+        assert_eq!(r.applied, Vec::<PromoApplication>::new());
     }
 
     #[test]
@@ -415,7 +415,7 @@ mod tests {
             ..base_promo(13)
         };
         let r = evaluate(&cart_1000(), &[p], &[], datetime!(2026-05-31 10:00 UTC));
-        assert!(r.applied.is_empty());
+        assert_eq!(r.applied, Vec::<PromoApplication>::new());
     }
 
     #[test]

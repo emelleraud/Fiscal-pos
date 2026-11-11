@@ -63,7 +63,7 @@ pub struct EvalResult {
     pub rejected: Vec<PromoApplication>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PromoApplication {
     pub promo_id: Uuid,
     pub promo_name: String,

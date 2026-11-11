@@ -667,7 +667,7 @@ mod tests {
         assert_eq!(export.entry_count, 6);
         assert_eq!(export.year, year);
         assert_ne!(export.csv_hash, [0u8; 32]);
-        assert!(!export.csv_content.is_empty());
+        assert_ne!(export.csv_content, Vec::<u8>::new());
     }
 
     // --- Signature Ed25519 ---

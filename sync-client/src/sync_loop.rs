@@ -447,7 +447,10 @@ mod tests {
     #[test]
     fn build_payloads_empty_entries() {
         let payloads = build_payloads(&[], "SITE-001");
-        assert!(payloads.is_empty());
+        assert_eq!(
+            payloads,
+            Vec::<crate::serializer::FiscalEntryPayload>::new()
+        );
     }
 
     #[test]
