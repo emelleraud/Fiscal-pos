@@ -1,5 +1,5 @@
 # Rapport de projet — pos-fiscal
-_Mis à jour le 2026-07-04_
+_Mis à jour le 2026-07-06_
 
 ---
 
@@ -54,6 +54,7 @@ kds-print-agent (Rust — proxy HTTP → device USB imprimante)
 | Sprint 4 | Back-office : auth + multi-sites + admin réseau | ✅ Terminé |
 | Sprint 5 | KDS — Kitchen Display System (3 plans, ~30 commits) | ✅ Terminé |
 | Sprint 6 | KDS Failover — heartbeat + reroutage automatique | ✅ Terminé |
+| Sprint 7 | KDS Marche en avant — workflow complet prep → assembly → expo → ORB | ✅ Terminé |
 
 ---
 
@@ -81,8 +82,8 @@ kds-print-agent (Rust — proxy HTTP → device USB imprimante)
 | `POST /api/v1/orders/:id/cancel` | Annuler (motif obligatoire) |
 | `POST /api/v1/archive/:year` | Générer l'archive annuelle NF525 §7 |
 | `GET /api/v1/kds/feed/:station_id` | SSE temps réel par station |
-| `POST /api/v1/kds/ack` | Acquitter ligne ou commande |
-| `POST /api/v1/kds/served` | Marquer commande servie |
+| `POST /api/v1/kds/orders/:id/ack` | Acquitter ligne ou commande (rôle-aware) |
+| `POST /api/v1/kds/orders/:id/served` | Marquer commande servie (2e bump expo) |
 | `GET /api/v1/kds/config` | Profil actif (normal/rush) |
 | `PUT /api/v1/kds/config` | Changer de profil |
 | `GET /api/v1/kds/stations` | Liste stations du profil actif |
@@ -166,6 +167,29 @@ kds-print-agent (Rust — proxy HTTP → device USB imprimante)
 - `KdsTimerThresholds` : seuils warning/critical éditables par station
 - Navigation « Cuisine » ajoutée dans Layout.tsx + 5 routes `/kitchen/*`
 
+### Sprint 7 — KDS Marche en avant ✅ (2026-07-06)
+
+#### Workflow complet 4 rôles : preparation → assembly → expo → ORB
+
+- **Rôle `expo`** ajouté : `StationRole::Expo` dans `kds-engine/src/types/station.rs` + migration SQL `0010_expo_role.sql` + TypeScript `types.ts`
+- **`StationRole::as_str()`** : méthode ajoutée pour les requêtes SQLite dynamiques
+- **`dispatch_order` Phase 4** : assembly et expo reçoivent la commande complète (toutes lignes, toutes catégories)
+- **`acknowledge()` rôle-aware** :
+  - Préparation + ligne individuelle → impression ticket produit (mode "avec KDS")
+  - Préparation + toutes lignes ackées → `OrderUpdated(in_progress/preparation)` — badges prep sur assembly/expo
+  - Assembly + toutes lignes ackées → impression ticket complet + **`cascade_clear_upstream(prep)`** + `OrderUpdated(in_progress/assembly)`
+  - Expo + 1er bump → **`cascade_clear_upstream(prep+assembly)`** + `OrderUpdated(ready/expo)` → ORB colonne PRÊT ✓
+- **`cascade_clear_upstream()`** : force-ack les lignes + émet `OrderAcked` pour chaque station amont — un bump aval efface automatiquement les KDS amont non bumpés
+- **`kds-app`** :
+  - `ExpoStation.tsx` : filtre `status !== 'served'`, bouton EXPO PRÊT → (1er bump) puis LIVRÉ ✓ (2e bump)
+  - `AssemblyStation.tsx` : badges prep temps réel (`station_statuses`), bouton PRÊT →
+  - `PreparationStation.tsx` : filtre corrigé (`!lines.every(acknowledged)`)
+  - `App.tsx` : route `/kds/expo-01` → `ExpoStation`
+- **`seed_kds_test_data.py`** : 5 stations (grill-01, boissons-01, assembly-01, expo-01, ready_board)
+- **42 tests kds-engine** (tous verts)
+
+---
+
 ### Sprint 6 — KDS Failover ✅ (2026-07-04)
 
 - **`kds-engine`** : fonctions privées `is_online` + `resolve_effective_station` (8 tests unitaires)
@@ -179,6 +203,14 @@ kds-print-agent (Rust — proxy HTTP → device USB imprimante)
 
 ## 5. Ce qui reste à faire
 
+### Backlog KDS — SECOURS (fonctions de récupération en salle)
+
+| Item | Priorité | Description |
+|------|----------|-------------|
+| **Parquer une commande** | Haute | Masquer temporairement une commande sur tous les KDS (ex : client absent, en attente) sans la supprimer — bouton "Parquer" → `status='parked'`, disparaît des écrans actifs |
+| **Rappeler une commande parquée** | Haute | Retrouver et réafficher une commande parkée ou déjà bumpée (status='ready'/'served') — page de recherche + réinjection SSE `order_new` |
+| **Réinjecter une commande manquante** | Haute | Forcer le re-dispatch KDS d'une commande payée qui n'est pas ou mal passée — endpoint `POST /api/v1/kds/orders/:id/redispatch` qui relit les lignes en base et rebroadcast `order_new` sur toutes les stations |
+
 ### Backlog KDS (post-MVP)
 
 | Item | Priorité | Note |
@@ -187,6 +219,7 @@ kds-print-agent (Rust — proxy HTTP → device USB imprimante)
 | **kds-app servi par edge-api** | Moyenne | `ServeDir` Axum → `/kds/*` (actuellement SPA indépendante) |
 | **`generate_short_number` race** | Basse | Légère race sur le compteur journalier en charge élevée |
 | **`send_usb_agent` status check** | Basse | Pas de vérification du code HTTP retourné par kds-print-agent |
+| **Chargement initial des commandes en cours** | Haute | kds-app ne charge pas les commandes existantes au démarrage — SSE only, les commandes antérieures à la connexion sont invisibles. Nécessite un endpoint `GET /api/v1/kds/orders?station_id=:id` |
 
 ### Backlog long terme (hors MVP)
 
@@ -225,13 +258,13 @@ kds-print-agent (Rust — proxy HTTP → device USB imprimante)
 | `fiscal-engine` | 133 unitaires | ✅ |
 | `sync-client` | 38 unitaires + 2 E2E (Supabase réel) | ✅ |
 | `edge-api` | 18 intégration (Axum oneshot + SQLite tempfile) | ✅ |
-| `kds-engine` | ~39 unitaires | ✅ |
+| `kds-engine` | 42 unitaires | ✅ |
 | `common` | 7 unitaires | ✅ |
 | `pos-app` | ~24 Vitest + 3 Playwright E2E | ✅ |
 | `backoffice` | Aucun test automatisé | ❌ À faire |
 | `kds-app` | 2 Vitest (heartbeat) | ✅ |
 
-**Total Rust : ~240 tests — tous verts.**
+**Total Rust : ~243 tests — tous verts.**
 
 ---
 
@@ -251,7 +284,7 @@ source .env.test && cargo test -p sync-client --test e2e_sync -- --ignored --noc
 DATABASE_URL=sqlite:./restaurant.db DATA_DIR=./data cargo run -p edge-api
 
 # kds-app (dev)
-cd kds-app && npm run dev     # port 5174 (VITE_EDGE_API_URL=http://localhost:8080)
+cd kds-app && npm run dev     # port 5173 par défaut (VITE_EDGE_API_URL=http://localhost:8080)
 
 # Back-office
 cd backoffice && npm run dev  # port 5173

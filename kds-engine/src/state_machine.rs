@@ -524,6 +524,7 @@ async fn handle_all_acked(
                     }
                 }
             }
+            cascade_clear_upstream(pool, broadcaster, order_id, &[StationRole::Preparation], now_ms).await?;
             let station_statuses = load_prep_station_statuses(pool, order_id).await?;
             broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
                 order_id: order_id.to_string(),
@@ -533,6 +534,7 @@ async fn handle_all_acked(
             }));
         }
         Some(StationRole::Expo) => {
+            cascade_clear_upstream(pool, broadcaster, order_id, &[StationRole::Preparation, StationRole::Assembly], now_ms).await?;
             let station_statuses = load_prep_station_statuses(pool, order_id).await?;
             broadcaster.send(KdsEvent::OrderUpdated(crate::types::event::KdsOrderUpdate {
                 order_id: order_id.to_string(),
@@ -593,6 +595,59 @@ async fn all_lines_acked(
     .fetch_one(pool)
     .await?;
     Ok(total > 0 && unacked == 0)
+}
+
+/// Force-ack toutes les lignes et émet `OrderAcked` pour chaque station des rôles indiqués.
+/// Permet à un bump aval (assembly, expo) d'effacer automatiquement les KDS amont.
+async fn cascade_clear_upstream(
+    pool: &SqlitePool,
+    broadcaster: &KdsBroadcaster,
+    order_id: &str,
+    roles: &[StationRole],
+    now_ms: i64,
+) -> Result<(), KdsError> {
+    let role_strs: Vec<&str> = roles.iter().map(StationRole::as_str).collect();
+    let placeholders = role_strs.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT DISTINCT l.station_id
+         FROM kds_order_lines l
+         INNER JOIN kds_stations s ON s.id = l.station_id
+         WHERE l.order_id = ? AND s.role IN ({placeholders})"
+    );
+    let mut q = sqlx::query_scalar::<_, String>(&sql).bind(order_id);
+    for r in &role_strs {
+        q = q.bind(r);
+    }
+    let station_ids: Vec<String> = q.fetch_all(pool).await?;
+
+    for sid in &station_ids {
+        sqlx::query(
+            "UPDATE kds_order_lines SET acknowledged = 1, acknowledged_at = ?
+             WHERE order_id = ? AND station_id = ? AND acknowledged = 0",
+        )
+        .bind(now_ms)
+        .bind(order_id)
+        .bind(sid)
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            "UPDATE kds_orders SET status = 'ready', first_bump_at = COALESCE(first_bump_at, ?)
+             WHERE order_id = ? AND station_id = ?",
+        )
+        .bind(now_ms)
+        .bind(order_id)
+        .bind(sid)
+        .execute(pool)
+        .await?;
+
+        broadcaster.send(KdsEvent::OrderAcked(crate::types::event::KdsAckPayload {
+            order_id: order_id.to_string(),
+            station_id: sid.clone(),
+            line_id: None,
+        }));
+    }
+    Ok(())
 }
 
 /// Charge les statuts des stations de préparation impliquées dans une commande.

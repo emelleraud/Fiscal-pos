@@ -16,6 +16,20 @@ pub enum StationRole {
     Expo,
 }
 
+impl StationRole {
+    /// Retourne la valeur TEXT pour SQLite (correspond au CHECK constraint).
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Preparation => "preparation",
+            Self::Holding => "holding",
+            Self::Assembly => "assembly",
+            Self::ReadyBoard => "ready_board",
+            Self::Expo => "expo",
+        }
+    }
+}
+
 /// Canal de sortie d'une station.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
